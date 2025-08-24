@@ -22,90 +22,6 @@ customers, subs, events = load_data()
 
 st.set_page_config(page_title="KPI Dashboard", layout="wide")
 
-"""
-🏦 Revenue & Growth
-
-	MRR (Monthly Recurring Revenue) → total subscription revenue per month.
-
-	ARR (Annual Recurring Revenue) → MRR × 12.
-
-	New MRR → revenue from brand new customers.
-
-	Expansion MRR → upsells / add-ons / seat increases.
-
-	Contraction MRR → downgrades / reduced usage.
-
-	Churned MRR → lost revenue from cancellations.
-
-	Net New MRR = New + Expansion − Contraction − Churn.
-
-	Growth Rate → % change in MRR month-over-month.
-
-👥 Customer Metrics
-
-	Active Customers → count of distinct customers per month.
-
-	New Customers → count of signups.
-
-	Churned Customers (Logo Churn) → customers who left in a month.
-
-	Customer Churn Rate = churned / active previous month.
-
-	Average Revenue per Account (ARPA) = MRR / # active customers.
-
-	Customer Lifetime (months) = 1 / churn rate.
-
-💰 Value Metrics
-
-	LTV (Customer Lifetime Value) = ARPA × Gross Margin ÷ Churn Rate.
-
-	CAC (Customer Acquisition Cost) = spend ÷ conversions.
-
-	CAC by Channel (from events_marketing.csv).
-
-	LTV/CAC Ratio (efficiency benchmark, >3 = healthy).
-
-	Payback Period = CAC ÷ ARPA (months to recover acquisition cost).
-
-📈 Retention & Cohorts
-
-	Cohort Retention → survival of customers grouped by signup month.
-
-	Revenue Retention:
-
-	Gross Revenue Retention (GRR) = 1 − (churned + contraction) ÷ starting MRR.
-
-	Net Revenue Retention (NRR) = (starting MRR − churn + expansion) ÷ starting MRR.
-
-	Logo Retention = % of customers still active from a cohort.
-
-📊 Funnel & Marketing
-
-	Visits → Trials Conversion Rate = trials ÷ visits.
-
-	Trials → Paid Conversion Rate = conversions ÷ trials.
-
-	Overall Funnel Conversion Rate = conversions ÷ visits.
-
-	Spend per Channel (Google, LinkedIn, Organic, Referral).
-
-	ROI per Channel = (MRR from converted customers − spend) ÷ spend.
-
-🌍 Segmentation
-
-	Using customers.csv:
-
-	MRR by Plan (Basic, Pro, Enterprise).
-
-	MRR by Country.
-
-	MRR by Acquisition Channel.
-
-	Churn by Segment (are Enterprise customers more loyal?).
-"""
-
-
-
 # Tabs for each KPI section
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏦 Revenue & Growth",
@@ -118,8 +34,68 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 with tab1:
     st.header("🏦 Revenue & Growth")
-    # show metrics like MRR, ARR, New/Expansion/Churn MRR, Growth rate
-    # charts: MRR over time, waterfall of movements
+    st.divider()
+
+
+    # --- MRR (Monthly Recurring Revenue) ---
+
+    mrr_by_month = (
+        subs.groupby(subs["period_start"].dt.to_period("M"))["mrr"]
+        .sum()
+        .reset_index()
+    )
+
+    mrr_by_month["period_start"] = mrr_by_month["period_start"].astype(str)
+
+    avg_mrr = mrr_by_month["mrr"].mean()
+    st.markdown("# MRR (Monthly Recurring Revenue)")
+    st.metric(label="Average MRR", value=f"€{avg_mrr:,.0f}")
+
+    fig = px.line(
+        mrr_by_month,
+        x="period_start",
+        y="mrr",
+        markers=True,
+        title="MRR Over Time"
+    )
+    fig.update_layout(xaxis_title="Month", yaxis_title="MRR (€)")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.dataframe(
+        mrr_by_month.rename(columns={"period_start": "Month", "mrr": "MRR (€)"}),
+        use_container_width=True
+    )
+    
+    st.divider()
+
+
+    # --- ARR (Annual Recurring Revenue) ---
+
+    arr_by_month = mrr_by_month.copy()
+    arr_by_month["ARR"] = arr_by_month["mrr"] * 12
+
+    latest_arr = arr_by_month["ARR"].iloc[-1]
+    st.markdown("# ARR (Annual Recurring Revenue)")
+    st.metric(label="ARR (run-rate of latest month)", value=f"€{latest_arr:,.0f}")
+
+    fig_arr = px.line(
+        arr_by_month,
+        x="period_start",
+        y="ARR",
+        markers=True,
+        title="ARR Over Time"
+    )
+    fig_arr.update_layout(xaxis_title="Month", yaxis_title="ARR (€)")
+    st.plotly_chart(fig_arr, use_container_width=True)
+
+    st.dataframe(
+        arr_by_month.rename(columns={"period_start": "Month", "ARR": "ARR (€)"})[["Month", "ARR (€)"]],
+        use_container_width=True
+    )
+    st.divider()
+
+
 
 with tab2:
     st.header("👥 Customer Metrics")
