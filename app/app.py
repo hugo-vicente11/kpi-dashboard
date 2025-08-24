@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 from pathlib import Path
 
@@ -95,7 +96,109 @@ with tab1:
     )
     st.divider()
 
+    # --- MRR Movements (New, Expansion, Contraction, Churned) ---
 
+    # 1) Monthly series per customer
+    cm = (
+        subs.assign(month=subs["period_start"].dt.to_period("M"))
+            .groupby(["customer_id", "month"], as_index=False)["mrr"]
+            .sum()
+    )
+
+    # 2) Align current month with previous month for the same customer
+    prev = cm.rename(columns={"mrr": "mrr_prev"}).copy()
+    prev["month"] = prev["month"] + 1  # shift forward to align prev->current
+
+    cur_prev = cm.merge(prev, on=["customer_id", "month"], how="outer")
+
+    # 3) Replace NaN with 0 for easier calculations
+    cur_prev[["mrr", "mrr_prev"]] = cur_prev[["mrr", "mrr_prev"]].fillna(0)
+
+    # 4) Classify movements row by row (per customer, month)
+    cur_prev["new_mrr"]         = np.where((cur_prev["mrr_prev"] == 0) & (cur_prev["mrr"] > 0), cur_prev["mrr"], 0)
+    cur_prev["expansion_mrr"]   = np.where((cur_prev["mrr"] > cur_prev["mrr_prev"]) & (cur_prev["mrr_prev"] > 0),
+                                        cur_prev["mrr"] - cur_prev["mrr_prev"], 0)
+    cur_prev["contraction_mrr"] = np.where((cur_prev["mrr_prev"] > cur_prev["mrr"]) & (cur_prev["mrr"] > 0),
+                                        cur_prev["mrr_prev"] - cur_prev["mrr"], 0)
+    cur_prev["churned_mrr"]     = np.where((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0),
+                                        cur_prev["mrr_prev"], 0)
+
+    # 5) Aggregate by month
+    mov_month = (cur_prev
+                .groupby("month", as_index=False)[["new_mrr","expansion_mrr","contraction_mrr","churned_mrr"]]
+                .sum()
+                .sort_values("month"))
+    mov_month = mov_month.iloc[:-1] # Remove ghost month created when merging
+
+    # 6) Net New MRR
+    mov_month["net_new_mrr"] = (mov_month["new_mrr"] + mov_month["expansion_mrr"]
+                                - mov_month["contraction_mrr"] - mov_month["churned_mrr"])
+
+    # 7) Prepare for chart (positives vs negatives)
+    plot_df = mov_month.copy()
+    plot_df["month"] = plot_df["month"].astype(str)
+    plot_long = (plot_df
+                .assign(Contraction=-plot_df["contraction_mrr"], Churned=-plot_df["churned_mrr"],
+                        New=plot_df["new_mrr"], Expansion=plot_df["expansion_mrr"])
+                .melt(id_vars="month",
+                    value_vars=["New","Expansion","Contraction","Churned"],
+                    var_name="Movement", value_name="Amount"))
+
+    st.markdown("# MRR Movements")
+    # Stacked bar chart (expansion/new positive; contraction/churned negative)
+    fig_mov = px.bar(plot_long, x="month", y="Amount", color="Movement",
+                    title="MRR Movements by Month (New / Expansion / Contraction / Churned)")
+    fig_mov.update_layout(xaxis_title="Month", yaxis_title="MRR Movement (€)")
+    st.plotly_chart(fig_mov, use_container_width=True)
+
+    # Summary table (last 6 months)
+    st.dataframe(
+        mov_month.rename(columns={
+            "month":"Month",
+            "new_mrr":"New",
+            "expansion_mrr":"Expansion",
+            "contraction_mrr":"Contraction",
+            "churned_mrr":"Churned",
+            "net_new_mrr":"Net New"
+        }),
+        use_container_width=True
+    )
+    st.divider()
+
+    # --- Growth Rate (MoM % change in MRR) ---
+
+    # Ensure months are sorted correctly
+    mrr_by_month_sorted = mrr_by_month.sort_values("period_start").copy()
+
+    # Calculate % change vs previous month
+    mrr_by_month_sorted["growth_rate"] = mrr_by_month_sorted["mrr"].pct_change() * 100
+
+    # KPI: latest growth rate
+    latest_growth = mrr_by_month_sorted["growth_rate"].iloc[-1]
+    st.markdown("# Growth Rate (MoM % change in MRR)")
+    st.metric(
+        label="Latest Growth Rate",
+        value=f"{latest_growth:+.2f}%"
+    )
+
+    # Line chart of Growth Rate
+    fig_growth = px.line(
+        mrr_by_month_sorted,
+        x="period_start",
+        y="growth_rate",
+        markers=True,
+        title="MRR Growth Rate (Month-over-Month)"
+    )
+    fig_growth.update_layout(xaxis_title="Month", yaxis_title="Growth Rate (%)")
+    st.plotly_chart(fig_growth, use_container_width=True)
+
+    # Show last 6 months in table
+    st.dataframe(
+        mrr_by_month_sorted[["period_start", "mrr", "growth_rate"]].rename(
+            columns={"period_start":"Month", "mrr":"MRR (€)", "growth_rate":"Growth Rate (%)"}
+        ),
+        use_container_width=True
+    )
 
 with tab2:
     st.header("👥 Customer Metrics")
