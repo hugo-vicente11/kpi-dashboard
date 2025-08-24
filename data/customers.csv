@@ -1,0 +1,392 @@
+customer_id,signup_date,plan_at_signup,country,acquisition_channel
+C0001,2024-03-16,Basic,PT,Google Ads
+C0002,2024-03-15,Pro,FR,Organic
+C0003,2024-03-15,Basic,PT,LinkedIn Ads
+C0004,2024-03-19,Basic,PT,Organic
+C0005,2024-03-12,Pro,PT,Organic
+C0006,2024-03-23,Pro,PT,Google Ads
+C0007,2024-03-20,Pro,PT,LinkedIn Ads
+C0008,2024-03-25,Basic,PT,Google Ads
+C0009,2024-03-03,Basic,PT,Referral
+C0010,2024-03-05,Pro,DE,Organic
+C0011,2024-03-19,Basic,FR,LinkedIn Ads
+C0012,2024-03-07,Pro,PT,Referral
+C0013,2024-03-21,Pro,ES,LinkedIn Ads
+C0014,2024-03-09,Basic,FR,Google Ads
+C0015,2024-03-07,Basic,PT,Organic
+C0016,2024-03-18,Basic,PT,Organic
+C0017,2024-03-04,Basic,PT,Google Ads
+C0018,2024-03-25,Enterprise,PT,Organic
+C0019,2024-03-14,Basic,ES,Google Ads
+C0020,2024-03-18,Basic,PT,Google Ads
+C0021,2024-03-26,Pro,ES,Referral
+C0022,2024-04-09,Pro,DE,Google Ads
+C0023,2024-04-26,Basic,PT,Organic
+C0024,2024-04-21,Enterprise,PT,Organic
+C0025,2024-04-02,Pro,PT,LinkedIn Ads
+C0026,2024-04-20,Basic,UK,Organic
+C0027,2024-04-15,Pro,PT,Organic
+C0028,2024-04-07,Pro,PT,Organic
+C0029,2024-04-12,Enterprise,PT,Organic
+C0030,2024-04-08,Basic,PT,Google Ads
+C0031,2024-04-15,Pro,ES,Organic
+C0032,2024-04-03,Basic,PT,Organic
+C0033,2024-04-14,Enterprise,PT,Referral
+C0034,2024-04-17,Pro,PT,LinkedIn Ads
+C0035,2024-04-04,Basic,PT,Google Ads
+C0036,2024-04-18,Basic,PT,Google Ads
+C0037,2024-04-08,Pro,UK,Google Ads
+C0038,2024-04-04,Basic,PT,Organic
+C0039,2024-04-02,Basic,DE,Referral
+C0040,2024-04-06,Basic,ES,Google Ads
+C0041,2024-04-22,Pro,PT,LinkedIn Ads
+C0042,2024-04-10,Basic,PT,Google Ads
+C0043,2024-05-04,Pro,UK,Organic
+C0044,2024-05-22,Basic,PT,LinkedIn Ads
+C0045,2024-05-18,Basic,UK,LinkedIn Ads
+C0046,2024-05-26,Pro,PT,Google Ads
+C0047,2024-05-12,Basic,PT,LinkedIn Ads
+C0048,2024-05-02,Pro,PT,Google Ads
+C0049,2024-05-10,Basic,PT,Organic
+C0050,2024-05-04,Basic,PT,Google Ads
+C0051,2024-05-14,Basic,ES,Referral
+C0052,2024-05-16,Basic,PT,Google Ads
+C0053,2024-05-15,Basic,PT,Organic
+C0054,2024-05-08,Pro,PT,Organic
+C0055,2024-05-14,Pro,UK,Organic
+C0056,2024-05-23,Pro,PT,Organic
+C0057,2024-05-25,Enterprise,PT,Organic
+C0058,2024-05-08,Pro,PT,Google Ads
+C0059,2024-05-21,Basic,PT,LinkedIn Ads
+C0060,2024-05-16,Basic,PT,Organic
+C0061,2024-05-13,Enterprise,ES,Google Ads
+C0062,2024-05-18,Basic,PT,Organic
+C0063,2024-05-15,Basic,PT,LinkedIn Ads
+C0064,2024-05-21,Basic,PT,Organic
+C0065,2024-05-24,Basic,UK,Organic
+C0066,2024-05-26,Basic,PT,LinkedIn Ads
+C0067,2024-05-25,Enterprise,DE,Referral
+C0068,2024-05-13,Basic,DE,Referral
+C0069,2024-06-09,Basic,PT,Google Ads
+C0070,2024-06-15,Enterprise,PT,Organic
+C0071,2024-06-13,Basic,FR,Organic
+C0072,2024-06-01,Enterprise,UK,Organic
+C0073,2024-06-25,Basic,FR,Google Ads
+C0074,2024-06-07,Pro,UK,Organic
+C0075,2024-06-09,Basic,FR,Google Ads
+C0076,2024-06-24,Pro,PT,Google Ads
+C0077,2024-06-01,Basic,UK,Organic
+C0078,2024-06-12,Pro,PT,Organic
+C0079,2024-06-08,Pro,PT,Organic
+C0080,2024-06-24,Pro,PT,Organic
+C0081,2024-06-11,Basic,PT,Organic
+C0082,2024-06-19,Pro,PT,Referral
+C0083,2024-06-17,Pro,PT,Organic
+C0084,2024-06-08,Pro,PT,Organic
+C0085,2024-06-03,Enterprise,PT,Organic
+C0086,2024-06-03,Basic,PT,Referral
+C0087,2024-06-01,Pro,UK,Organic
+C0088,2024-06-27,Basic,PT,LinkedIn Ads
+C0089,2024-06-05,Pro,FR,LinkedIn Ads
+C0090,2024-06-10,Basic,ES,Referral
+C0091,2024-06-07,Pro,PT,LinkedIn Ads
+C0092,2024-06-26,Basic,PT,Referral
+C0093,2024-06-09,Basic,PT,Organic
+C0094,2024-06-07,Basic,FR,Google Ads
+C0095,2024-06-09,Basic,PT,Google Ads
+C0096,2024-06-08,Basic,DE,Referral
+C0097,2024-06-12,Basic,PT,Organic
+C0098,2024-07-02,Basic,ES,LinkedIn Ads
+C0099,2024-07-01,Basic,PT,Google Ads
+C0100,2024-07-16,Pro,PT,Organic
+C0101,2024-07-23,Pro,PT,Referral
+C0102,2024-07-23,Basic,PT,Google Ads
+C0103,2024-07-24,Pro,DE,Organic
+C0104,2024-07-05,Basic,DE,LinkedIn Ads
+C0105,2024-07-03,Pro,PT,Organic
+C0106,2024-07-12,Pro,PT,LinkedIn Ads
+C0107,2024-07-08,Pro,UK,Organic
+C0108,2024-07-22,Pro,DE,Referral
+C0109,2024-07-27,Basic,FR,Organic
+C0110,2024-07-03,Pro,DE,Referral
+C0111,2024-07-01,Pro,PT,LinkedIn Ads
+C0112,2024-07-03,Pro,DE,Organic
+C0113,2024-07-05,Basic,DE,Organic
+C0114,2024-07-15,Basic,FR,Organic
+C0115,2024-07-14,Basic,PT,Organic
+C0116,2024-07-03,Basic,UK,LinkedIn Ads
+C0117,2024-07-01,Enterprise,PT,Google Ads
+C0118,2024-07-05,Basic,UK,Google Ads
+C0119,2024-07-26,Enterprise,PT,Referral
+C0120,2024-07-23,Basic,PT,Organic
+C0121,2024-07-14,Pro,PT,Google Ads
+C0122,2024-07-07,Pro,PT,Google Ads
+C0123,2024-08-27,Basic,FR,Organic
+C0124,2024-08-09,Pro,PT,Referral
+C0125,2024-08-15,Basic,ES,Google Ads
+C0126,2024-08-15,Basic,ES,Organic
+C0127,2024-08-26,Pro,DE,Organic
+C0128,2024-08-10,Basic,PT,Organic
+C0129,2024-08-13,Basic,PT,Organic
+C0130,2024-08-19,Pro,UK,Organic
+C0131,2024-08-07,Basic,ES,Referral
+C0132,2024-08-17,Basic,PT,Google Ads
+C0133,2024-08-20,Pro,PT,Organic
+C0134,2024-08-04,Basic,PT,Google Ads
+C0135,2024-08-05,Pro,UK,Google Ads
+C0136,2024-08-23,Basic,PT,Organic
+C0137,2024-08-07,Pro,PT,Google Ads
+C0138,2024-08-13,Basic,ES,LinkedIn Ads
+C0139,2024-08-15,Basic,PT,Organic
+C0140,2024-08-11,Basic,DE,Google Ads
+C0141,2024-08-04,Basic,ES,Organic
+C0142,2024-08-13,Basic,PT,Google Ads
+C0143,2024-08-07,Pro,PT,Google Ads
+C0144,2024-08-27,Basic,PT,LinkedIn Ads
+C0145,2024-08-19,Basic,UK,Organic
+C0146,2024-08-22,Pro,PT,Organic
+C0147,2024-08-02,Pro,DE,Google Ads
+C0148,2024-08-10,Enterprise,PT,Referral
+C0149,2024-09-13,Pro,ES,LinkedIn Ads
+C0150,2024-09-25,Basic,DE,Google Ads
+C0151,2024-09-21,Basic,FR,LinkedIn Ads
+C0152,2024-09-06,Pro,PT,Organic
+C0153,2024-09-12,Pro,PT,LinkedIn Ads
+C0154,2024-09-12,Basic,PT,Organic
+C0155,2024-09-20,Basic,PT,Organic
+C0156,2024-09-11,Pro,PT,Organic
+C0157,2024-09-26,Basic,PT,Google Ads
+C0158,2024-09-23,Basic,PT,Google Ads
+C0159,2024-09-25,Pro,UK,Organic
+C0160,2024-09-07,Pro,DE,Google Ads
+C0161,2024-09-01,Basic,PT,Organic
+C0162,2024-09-01,Enterprise,DE,LinkedIn Ads
+C0163,2024-09-25,Basic,FR,Organic
+C0164,2024-09-27,Basic,PT,Google Ads
+C0165,2024-09-25,Basic,PT,Organic
+C0166,2024-09-20,Basic,PT,Google Ads
+C0167,2024-09-13,Pro,PT,Google Ads
+C0168,2024-09-09,Pro,PT,Organic
+C0169,2024-09-03,Basic,ES,Organic
+C0170,2024-09-07,Basic,PT,Google Ads
+C0171,2024-09-06,Pro,PT,Organic
+C0172,2024-09-08,Pro,FR,Organic
+C0173,2024-09-27,Basic,PT,Organic
+C0174,2024-09-09,Basic,UK,Google Ads
+C0175,2024-09-05,Pro,FR,Google Ads
+C0176,2024-09-01,Basic,UK,LinkedIn Ads
+C0177,2024-09-19,Basic,PT,Organic
+C0178,2024-09-10,Basic,PT,Google Ads
+C0179,2024-09-12,Basic,FR,Google Ads
+C0180,2024-09-24,Basic,FR,Google Ads
+C0181,2024-10-15,Basic,UK,LinkedIn Ads
+C0182,2024-10-27,Pro,PT,Organic
+C0183,2024-10-22,Pro,PT,Referral
+C0184,2024-10-24,Pro,ES,Organic
+C0185,2024-10-09,Pro,FR,Organic
+C0186,2024-10-20,Enterprise,PT,Google Ads
+C0187,2024-10-17,Basic,PT,LinkedIn Ads
+C0188,2024-10-17,Basic,PT,Organic
+C0189,2024-10-26,Basic,DE,LinkedIn Ads
+C0190,2024-10-20,Pro,ES,Referral
+C0191,2024-10-12,Pro,PT,Google Ads
+C0192,2024-10-07,Pro,PT,Referral
+C0193,2024-10-02,Basic,PT,Google Ads
+C0194,2024-10-03,Pro,PT,Google Ads
+C0195,2024-10-17,Pro,PT,LinkedIn Ads
+C0196,2024-10-05,Pro,PT,Organic
+C0197,2024-10-17,Pro,PT,Organic
+C0198,2024-10-24,Pro,PT,Organic
+C0199,2024-10-17,Pro,DE,Organic
+C0200,2024-10-27,Enterprise,PT,Organic
+C0201,2024-10-17,Basic,FR,Organic
+C0202,2024-10-02,Pro,ES,LinkedIn Ads
+C0203,2024-10-02,Basic,FR,Google Ads
+C0204,2024-10-22,Basic,ES,Organic
+C0205,2024-10-23,Basic,PT,Google Ads
+C0206,2024-10-05,Basic,FR,Organic
+C0207,2024-10-01,Basic,PT,Google Ads
+C0208,2024-10-01,Basic,PT,Organic
+C0209,2024-11-19,Basic,FR,Google Ads
+C0210,2024-11-02,Pro,PT,Organic
+C0211,2024-11-21,Basic,PT,Referral
+C0212,2024-11-12,Basic,PT,Organic
+C0213,2024-11-26,Basic,PT,Organic
+C0214,2024-11-06,Pro,UK,Organic
+C0215,2024-11-23,Pro,PT,Google Ads
+C0216,2024-11-04,Pro,DE,Google Ads
+C0217,2024-11-23,Basic,PT,Google Ads
+C0218,2024-11-11,Basic,UK,Organic
+C0219,2024-11-24,Basic,PT,LinkedIn Ads
+C0220,2024-11-27,Basic,PT,Google Ads
+C0221,2024-11-17,Enterprise,PT,Google Ads
+C0222,2024-11-06,Pro,FR,Organic
+C0223,2024-11-24,Basic,PT,LinkedIn Ads
+C0224,2024-11-05,Pro,PT,Google Ads
+C0225,2024-11-20,Pro,PT,Referral
+C0226,2024-11-02,Enterprise,FR,Google Ads
+C0227,2024-11-06,Pro,PT,Organic
+C0228,2024-11-22,Basic,PT,Organic
+C0229,2024-11-11,Pro,PT,Organic
+C0230,2024-11-16,Pro,PT,Organic
+C0231,2024-11-16,Pro,PT,Google Ads
+C0232,2024-12-01,Pro,FR,Referral
+C0233,2024-12-09,Basic,UK,Google Ads
+C0234,2024-12-27,Enterprise,ES,Google Ads
+C0235,2024-12-06,Basic,PT,LinkedIn Ads
+C0236,2024-12-16,Pro,FR,Organic
+C0237,2024-12-03,Pro,PT,Organic
+C0238,2024-12-20,Basic,UK,Google Ads
+C0239,2024-12-27,Basic,PT,Google Ads
+C0240,2024-12-04,Basic,PT,Organic
+C0241,2024-12-19,Pro,UK,Organic
+C0242,2024-12-26,Enterprise,UK,Google Ads
+C0243,2024-12-03,Basic,PT,Google Ads
+C0244,2024-12-19,Pro,PT,LinkedIn Ads
+C0245,2024-12-20,Pro,PT,Referral
+C0246,2024-12-07,Basic,PT,Google Ads
+C0247,2024-12-20,Pro,PT,Organic
+C0248,2024-12-09,Pro,PT,LinkedIn Ads
+C0249,2024-12-01,Pro,UK,Organic
+C0250,2024-12-08,Basic,PT,Google Ads
+C0251,2024-12-07,Basic,UK,Organic
+C0252,2024-12-18,Pro,UK,Google Ads
+C0253,2024-12-08,Basic,PT,Google Ads
+C0254,2024-12-01,Pro,FR,Organic
+C0255,2024-12-11,Basic,PT,LinkedIn Ads
+C0256,2024-12-25,Pro,PT,Referral
+C0257,2025-01-25,Pro,UK,Organic
+C0258,2025-01-18,Pro,PT,Organic
+C0259,2025-01-23,Enterprise,PT,Google Ads
+C0260,2025-01-10,Basic,PT,Referral
+C0261,2025-01-03,Pro,PT,LinkedIn Ads
+C0262,2025-01-07,Pro,PT,Google Ads
+C0263,2025-01-16,Pro,PT,Referral
+C0264,2025-01-26,Basic,UK,Organic
+C0265,2025-01-16,Basic,DE,LinkedIn Ads
+C0266,2025-01-25,Enterprise,PT,LinkedIn Ads
+C0267,2025-01-20,Basic,DE,Google Ads
+C0268,2025-01-17,Enterprise,PT,Organic
+C0269,2025-01-02,Basic,PT,Google Ads
+C0270,2025-01-01,Basic,PT,Organic
+C0271,2025-01-16,Basic,PT,Google Ads
+C0272,2025-01-12,Basic,PT,Google Ads
+C0273,2025-01-05,Pro,PT,LinkedIn Ads
+C0274,2025-01-05,Basic,DE,Google Ads
+C0275,2025-01-27,Enterprise,DE,Google Ads
+C0276,2025-01-23,Basic,PT,Google Ads
+C0277,2025-02-09,Pro,DE,Google Ads
+C0278,2025-02-09,Basic,PT,Organic
+C0279,2025-02-03,Pro,PT,Google Ads
+C0280,2025-02-19,Enterprise,PT,Organic
+C0281,2025-02-16,Pro,ES,Organic
+C0282,2025-02-16,Pro,DE,LinkedIn Ads
+C0283,2025-02-03,Pro,PT,Organic
+C0284,2025-02-20,Basic,DE,LinkedIn Ads
+C0285,2025-02-24,Enterprise,ES,Organic
+C0286,2025-02-22,Basic,FR,Referral
+C0287,2025-02-24,Pro,ES,Organic
+C0288,2025-02-01,Enterprise,ES,Organic
+C0289,2025-02-24,Basic,FR,Organic
+C0290,2025-02-20,Basic,PT,Organic
+C0291,2025-02-11,Basic,FR,Google Ads
+C0292,2025-02-17,Pro,DE,Organic
+C0293,2025-02-08,Basic,UK,Organic
+C0294,2025-02-04,Basic,PT,Google Ads
+C0295,2025-02-06,Enterprise,DE,Organic
+C0296,2025-03-08,Basic,PT,Google Ads
+C0297,2025-03-20,Pro,PT,Organic
+C0298,2025-03-03,Pro,PT,Organic
+C0299,2025-03-16,Basic,PT,Organic
+C0300,2025-03-25,Pro,PT,Organic
+C0301,2025-03-03,Enterprise,PT,Referral
+C0302,2025-03-25,Pro,PT,Google Ads
+C0303,2025-03-18,Basic,FR,Google Ads
+C0304,2025-03-14,Enterprise,PT,Google Ads
+C0305,2025-03-18,Pro,FR,Organic
+C0306,2025-03-02,Pro,ES,Organic
+C0307,2025-03-22,Pro,FR,Google Ads
+C0308,2025-03-03,Enterprise,ES,LinkedIn Ads
+C0309,2025-03-16,Basic,PT,Google Ads
+C0310,2025-03-09,Basic,FR,Google Ads
+C0311,2025-03-04,Basic,FR,Organic
+C0312,2025-03-01,Enterprise,PT,Organic
+C0313,2025-03-04,Pro,UK,Google Ads
+C0314,2025-03-01,Basic,DE,Organic
+C0315,2025-04-14,Basic,FR,LinkedIn Ads
+C0316,2025-04-21,Basic,UK,Organic
+C0317,2025-04-16,Pro,DE,Referral
+C0318,2025-04-20,Pro,UK,Referral
+C0319,2025-04-24,Basic,FR,Organic
+C0320,2025-04-08,Pro,PT,Google Ads
+C0321,2025-04-07,Pro,PT,Google Ads
+C0322,2025-04-03,Basic,PT,Referral
+C0323,2025-04-17,Pro,DE,Organic
+C0324,2025-04-01,Basic,PT,Referral
+C0325,2025-04-16,Basic,UK,LinkedIn Ads
+C0326,2025-05-12,Enterprise,PT,Organic
+C0327,2025-05-27,Basic,PT,Organic
+C0328,2025-05-19,Basic,PT,LinkedIn Ads
+C0329,2025-05-22,Enterprise,FR,Google Ads
+C0330,2025-05-23,Basic,FR,Organic
+C0331,2025-05-22,Basic,PT,Organic
+C0332,2025-05-14,Basic,UK,Organic
+C0333,2025-05-06,Enterprise,PT,Organic
+C0334,2025-05-06,Pro,PT,LinkedIn Ads
+C0335,2025-05-13,Basic,UK,Google Ads
+C0336,2025-05-19,Basic,PT,Organic
+C0337,2025-06-22,Pro,PT,LinkedIn Ads
+C0338,2025-06-08,Basic,PT,Google Ads
+C0339,2025-06-27,Basic,PT,LinkedIn Ads
+C0340,2025-06-27,Pro,PT,Google Ads
+C0341,2025-06-02,Pro,PT,Organic
+C0342,2025-06-21,Enterprise,PT,Organic
+C0343,2025-06-01,Basic,DE,Organic
+C0344,2025-06-15,Basic,PT,Organic
+C0345,2025-06-01,Basic,PT,Google Ads
+C0346,2025-06-05,Basic,PT,LinkedIn Ads
+C0347,2025-06-16,Pro,PT,Organic
+C0348,2025-06-19,Basic,FR,Google Ads
+C0349,2025-06-04,Basic,PT,LinkedIn Ads
+C0350,2025-06-03,Basic,UK,Google Ads
+C0351,2025-06-17,Basic,DE,LinkedIn Ads
+C0352,2025-06-17,Basic,UK,Google Ads
+C0353,2025-07-12,Pro,PT,Google Ads
+C0354,2025-07-14,Basic,UK,Google Ads
+C0355,2025-07-21,Basic,ES,Organic
+C0356,2025-07-06,Basic,ES,Organic
+C0357,2025-07-03,Basic,UK,Organic
+C0358,2025-07-09,Basic,ES,Google Ads
+C0359,2025-07-05,Pro,DE,Google Ads
+C0360,2025-07-24,Basic,FR,LinkedIn Ads
+C0361,2025-07-17,Basic,PT,Google Ads
+C0362,2025-07-14,Basic,PT,Google Ads
+C0363,2025-07-21,Basic,ES,Organic
+C0364,2025-07-03,Basic,UK,Organic
+C0365,2025-07-01,Basic,PT,LinkedIn Ads
+C0366,2025-07-20,Pro,DE,Google Ads
+C0367,2025-07-21,Basic,PT,Google Ads
+C0368,2025-08-23,Pro,PT,Organic
+C0369,2025-08-01,Pro,DE,LinkedIn Ads
+C0370,2025-08-03,Basic,ES,Referral
+C0371,2025-08-18,Pro,PT,Google Ads
+C0372,2025-08-25,Pro,PT,Organic
+C0373,2025-08-10,Pro,FR,Organic
+C0374,2025-08-22,Enterprise,DE,LinkedIn Ads
+C0375,2025-08-26,Pro,ES,LinkedIn Ads
+C0376,2025-08-03,Pro,UK,Organic
+C0377,2025-08-08,Pro,PT,Organic
+C0378,2025-08-14,Basic,PT,Organic
+C0379,2025-08-24,Basic,PT,LinkedIn Ads
+C0380,2025-08-18,Basic,ES,Organic
+C0381,2025-08-15,Basic,PT,Google Ads
+C0382,2025-08-22,Pro,PT,Organic
+C0383,2025-08-23,Basic,PT,LinkedIn Ads
+C0384,2025-08-02,Pro,PT,Organic
+C0385,2025-08-27,Pro,PT,Google Ads
+C0386,2025-08-10,Basic,PT,Google Ads
+C0387,2025-08-02,Basic,PT,LinkedIn Ads
+C0388,2025-08-26,Basic,ES,Organic
+C0389,2025-08-17,Basic,PT,Google Ads
+C0390,2025-08-08,Basic,PT,Google Ads
+C0391,2025-08-01,Basic,PT,Organic
