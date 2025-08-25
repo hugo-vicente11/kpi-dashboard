@@ -87,10 +87,6 @@ with tab1:
     fig.update_layout(xaxis_title="Month", yaxis_title="MRR (€)")
     st.plotly_chart(fig, use_container_width=True)
 
-    st.dataframe(
-        mrr_by_month.rename(columns={"period_start": "Month", "mrr": "MRR (€)"}),
-        use_container_width=True
-    )
     st.divider()
 
     # --- ARR (Annual Recurring Revenue) ---
@@ -112,10 +108,6 @@ with tab1:
     fig_arr.update_layout(xaxis_title="Month", yaxis_title="ARR (€)")
     st.plotly_chart(fig_arr, use_container_width=True)
 
-    st.dataframe(
-        arr_by_month.rename(columns={"period_start": "Month", "ARR": "ARR (€)"})[["Month", "ARR (€)"]],
-        use_container_width=True
-    )
     st.divider()
 
     # --- MRR Movements ---
@@ -161,17 +153,6 @@ with tab1:
     fig_mov.update_layout(xaxis_title="Month", yaxis_title="MRR Movement (€)")
     st.plotly_chart(fig_mov, use_container_width=True)
 
-    st.dataframe(
-        mov_month.rename(columns={
-            "month":"Month",
-            "new_mrr":"New",
-            "expansion_mrr":"Expansion",
-            "contraction_mrr":"Contraction",
-            "churned_mrr":"Churned",
-            "net_new_mrr":"Net New"
-        }),
-        use_container_width=True
-    )
     st.divider()
 
     # --- Growth Rate ---
@@ -193,12 +174,46 @@ with tab1:
     fig_growth.update_layout(xaxis_title="Month", yaxis_title="Growth Rate (%)")
     st.plotly_chart(fig_growth, use_container_width=True)
 
-    st.dataframe(
-        mrr_by_month_sorted[["period_start", "mrr", "growth_rate"]].rename(
-            columns={"period_start":"Month", "mrr":"MRR (€)", "growth_rate":"Growth Rate (%)"}
-        ),
-        use_container_width=True
+    mrr_month = (
+        subs.groupby(subs["period_start"].dt.to_period("M"))["mrr"]
+            .sum()
+            .reset_index()
+            .rename(columns={"period_start": "month", "mrr": "MRR (€)"})
+            .sort_values("month")
     )
+
+    mrr_month["ARR (€)"] = mrr_month["MRR (€)"] * 12
+    mrr_month["Growth Rate (%)"] = mrr_month["MRR (€)"].pct_change() * 100
+
+    mov_renamed = mov_month.rename(columns={
+        "new_mrr": "New (€)",
+        "expansion_mrr": "Expansion (€)",
+        "contraction_mrr": "Contraction (€)",
+        "churned_mrr": "Churned (€)",
+        "net_new_mrr": "Net New (€)"
+    })
+
+    summary = (
+        mrr_month.merge(mov_renamed, on="month", how="left")
+                .fillna({"New (€)": 0, "Expansion (€)": 0, "Contraction (€)": 0, "Churned (€)": 0, "Net New (€)": 0})
+    )
+
+    summary_display = summary.copy()
+    summary_display["Month"] = summary_display["month"].astype(str)
+    summary_display = summary_display.drop(columns=["month"])
+
+    summary_display = summary_display[[
+        "Month",
+        "MRR (€)", "ARR (€)", "Growth Rate (%)",
+        "New (€)", "Expansion (€)", "Contraction (€)", "Churned (€)", "Net New (€)"
+    ]]
+
+    for col in ["MRR (€)", "ARR (€)", "New (€)", "Expansion (€)", "Contraction (€)", "Churned (€)", "Net New (€)"]:
+        summary_display[col] = summary_display[col].round(2)
+    summary_display["Growth Rate (%)"] = summary_display["Growth Rate (%)"].round(2)
+
+    st.dataframe(summary_display, use_container_width=True)
+
 
 
 with tab2:
