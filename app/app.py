@@ -11,13 +11,13 @@ DATA = BASE / "data"
 # --- Load CSVs ---
 @st.cache_data
 def load_data():
-    customers = pd.read_csv(DATA / "customers.csv", parse_dates=["signup_date"])
+    cust = pd.read_csv(DATA / "customers.csv", parse_dates=["signup_date"])
     subs = pd.read_csv(
         DATA / "subscriptions.csv",
         parse_dates=["period_start", "period_end"]
     )
     events = pd.read_csv(DATA / "events_marketing.csv", parse_dates=["date"])
-    return customers, subs, events
+    return cust, subs, events
 
 customers, subs, events = load_data()
 
@@ -38,18 +38,43 @@ with tab1:
     st.divider()
 
 
+    # === Top summary metrics (latest) ===
+    mrr_series = (
+        subs.groupby(subs["period_start"].dt.to_period("M"))["mrr"]
+            .sum()
+            .sort_index()
+    )
+
+    latest_period = mrr_series.index.max()
+    latest_mrr = float(mrr_series.loc[latest_period])
+
+    # previous month (for growth rate)
+    prev_mrr = float(mrr_series.shift(1).loc[latest_period]) if latest_period in mrr_series.index else None
+    growth_latest = ( (latest_mrr - prev_mrr) / prev_mrr * 100 ) if (prev_mrr and prev_mrr != 0) else None
+
+    latest_arr = latest_mrr * 12
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("MRR (latest)", f"€{latest_mrr:,.0f}")
+    with c2:
+        st.metric("ARR (latest)", f"€{latest_arr:,.0f}")
+    with c3:
+        st.metric("Monthly Growth Rate (latest)", f"{growth_latest:+.2f}%" if growth_latest is not None else "—")
+
+
+
     # --- MRR (Monthly Recurring Revenue) ---
+    st.subheader("MRR (Monthly Recurring Revenue)")
 
     mrr_by_month = (
         subs.groupby(subs["period_start"].dt.to_period("M"))["mrr"]
         .sum()
         .reset_index()
     )
-
     mrr_by_month["period_start"] = mrr_by_month["period_start"].astype(str)
 
     avg_mrr = mrr_by_month["mrr"].mean()
-    st.markdown("# MRR (Monthly Recurring Revenue)")
     st.metric(label="Average MRR", value=f"€{avg_mrr:,.0f}")
 
     fig = px.line(
@@ -60,24 +85,21 @@ with tab1:
         title="MRR Over Time"
     )
     fig.update_layout(xaxis_title="Month", yaxis_title="MRR (€)")
-
     st.plotly_chart(fig, use_container_width=True)
 
     st.dataframe(
         mrr_by_month.rename(columns={"period_start": "Month", "mrr": "MRR (€)"}),
         use_container_width=True
     )
-    
     st.divider()
 
-
     # --- ARR (Annual Recurring Revenue) ---
+    st.subheader("ARR (Annual Recurring Revenue)")
 
     arr_by_month = mrr_by_month.copy()
     arr_by_month["ARR"] = arr_by_month["mrr"] * 12
 
     latest_arr = arr_by_month["ARR"].iloc[-1]
-    st.markdown("# ARR (Annual Recurring Revenue)")
     st.metric(label="ARR (run-rate of latest month)", value=f"€{latest_arr:,.0f}")
 
     fig_arr = px.line(
@@ -96,62 +118,49 @@ with tab1:
     )
     st.divider()
 
-    # --- MRR Movements (New, Expansion, Contraction, Churned) ---
+    # --- MRR Movements ---
+    st.subheader("MRR Movements (New, Expansion, Contraction, Churned)")
 
-    # 1) Monthly series per customer
     cm = (
         subs.assign(month=subs["period_start"].dt.to_period("M"))
             .groupby(["customer_id", "month"], as_index=False)["mrr"]
             .sum()
     )
-
-    # 2) Align current month with previous month for the same customer
     prev = cm.rename(columns={"mrr": "mrr_prev"}).copy()
-    prev["month"] = prev["month"] + 1  # shift forward to align prev->current
-
+    prev["month"] = prev["month"] + 1
     cur_prev = cm.merge(prev, on=["customer_id", "month"], how="outer")
-
-    # 3) Replace NaN with 0 for easier calculations
     cur_prev[["mrr", "mrr_prev"]] = cur_prev[["mrr", "mrr_prev"]].fillna(0)
 
-    # 4) Classify movements row by row (per customer, month)
     cur_prev["new_mrr"]         = np.where((cur_prev["mrr_prev"] == 0) & (cur_prev["mrr"] > 0), cur_prev["mrr"], 0)
     cur_prev["expansion_mrr"]   = np.where((cur_prev["mrr"] > cur_prev["mrr_prev"]) & (cur_prev["mrr_prev"] > 0),
-                                        cur_prev["mrr"] - cur_prev["mrr_prev"], 0)
+                                           cur_prev["mrr"] - cur_prev["mrr_prev"], 0)
     cur_prev["contraction_mrr"] = np.where((cur_prev["mrr_prev"] > cur_prev["mrr"]) & (cur_prev["mrr"] > 0),
-                                        cur_prev["mrr_prev"] - cur_prev["mrr"], 0)
+                                           cur_prev["mrr_prev"] - cur_prev["mrr"], 0)
     cur_prev["churned_mrr"]     = np.where((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0),
-                                        cur_prev["mrr_prev"], 0)
+                                           cur_prev["mrr_prev"], 0)
 
-    # 5) Aggregate by month
     mov_month = (cur_prev
                 .groupby("month", as_index=False)[["new_mrr","expansion_mrr","contraction_mrr","churned_mrr"]]
                 .sum()
                 .sort_values("month"))
-    mov_month = mov_month.iloc[:-1] # Remove ghost month created when merging
-
-    # 6) Net New MRR
+    mov_month = mov_month.iloc[:-1]
     mov_month["net_new_mrr"] = (mov_month["new_mrr"] + mov_month["expansion_mrr"]
                                 - mov_month["contraction_mrr"] - mov_month["churned_mrr"])
 
-    # 7) Prepare for chart (positives vs negatives)
     plot_df = mov_month.copy()
     plot_df["month"] = plot_df["month"].astype(str)
     plot_long = (plot_df
                 .assign(Contraction=-plot_df["contraction_mrr"], Churned=-plot_df["churned_mrr"],
                         New=plot_df["new_mrr"], Expansion=plot_df["expansion_mrr"])
                 .melt(id_vars="month",
-                    value_vars=["New","Expansion","Contraction","Churned"],
-                    var_name="Movement", value_name="Amount"))
+                      value_vars=["New","Expansion","Contraction","Churned"],
+                      var_name="Movement", value_name="Amount"))
 
-    st.markdown("# MRR Movements")
-    # Stacked bar chart (expansion/new positive; contraction/churned negative)
     fig_mov = px.bar(plot_long, x="month", y="Amount", color="Movement",
                     title="MRR Movements by Month (New / Expansion / Contraction / Churned)")
     fig_mov.update_layout(xaxis_title="Month", yaxis_title="MRR Movement (€)")
     st.plotly_chart(fig_mov, use_container_width=True)
 
-    # Summary table (last 6 months)
     st.dataframe(
         mov_month.rename(columns={
             "month":"Month",
@@ -165,23 +174,15 @@ with tab1:
     )
     st.divider()
 
-    # --- Growth Rate (MoM % change in MRR) ---
+    # --- Growth Rate ---
+    st.subheader("Growth Rate (MoM % change in MRR)")
 
-    # Ensure months are sorted correctly
     mrr_by_month_sorted = mrr_by_month.sort_values("period_start").copy()
-
-    # Calculate % change vs previous month
     mrr_by_month_sorted["growth_rate"] = mrr_by_month_sorted["mrr"].pct_change() * 100
 
-    # KPI: latest growth rate
     latest_growth = mrr_by_month_sorted["growth_rate"].iloc[-1]
-    st.markdown("# Growth Rate (MoM % change in MRR)")
-    st.metric(
-        label="Latest Growth Rate",
-        value=f"{latest_growth:+.2f}%"
-    )
+    st.metric(label="Latest Growth Rate", value=f"{latest_growth:+.2f}%")
 
-    # Line chart of Growth Rate
     fig_growth = px.line(
         mrr_by_month_sorted,
         x="period_start",
@@ -192,7 +193,6 @@ with tab1:
     fig_growth.update_layout(xaxis_title="Month", yaxis_title="Growth Rate (%)")
     st.plotly_chart(fig_growth, use_container_width=True)
 
-    # Show last 6 months in table
     st.dataframe(
         mrr_by_month_sorted[["period_start", "mrr", "growth_rate"]].rename(
             columns={"period_start":"Month", "mrr":"MRR (€)", "growth_rate":"Growth Rate (%)"}
@@ -200,10 +200,162 @@ with tab1:
         use_container_width=True
     )
 
+
 with tab2:
     st.header("👥 Customer Metrics")
-    # show Active Customers, Churn Rate, ARPA
-    # charts: customer count over time, churn trend
+    st.divider()
+
+    # --- Build monthly keys ---
+    subs["month"] = subs["period_start"].dt.to_period("M")
+    customers["signup_month"] = customers["signup_date"].dt.to_period("M")
+
+    # --- Active Customers per month ---
+    active_by_month = (
+        subs.groupby("month")["customer_id"]
+            .nunique()
+            .reset_index(name="active_customers")
+            .sort_values("month")
+    )
+
+    # --- New Customers (signups) per month ---
+    new_by_month = (
+        customers.groupby("signup_month")["customer_id"]
+                 .nunique()
+                 .reset_index()
+                 .rename(columns={"signup_month": "month", "customer_id": "new_customers"})
+    )
+
+    # --- Churned Customers per month (mrr_prev > 0 and current mrr == 0) ---
+    # per-customer monthly MRR
+    cm = (
+        subs.groupby(["customer_id", "month"], as_index=False)["mrr"]
+            .sum()
+            .sort_values(["customer_id", "month"])
+    )
+    prev = cm.rename(columns={"mrr": "mrr_prev"}).copy()
+    prev["month"] = prev["month"] + 1  # align prev->current
+    cur_prev = cm.merge(prev, on=["customer_id", "month"], how="outer").fillna(0)
+
+    churned_rows = cur_prev[(cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0)]
+    churned_by_month = (
+        churned_rows.groupby("month")["customer_id"]
+                    .nunique()
+                    .reset_index(name="churned_customers")
+    )
+
+    # --- MRR per month (for ARPA) ---
+    mrr_by_month_2 = (
+        subs.groupby("month")["mrr"]
+            .sum()
+            .reset_index(name="mrr")
+    )
+
+    # --- Assemble one monthly table ---
+    cust_month = (
+        active_by_month
+        .merge(new_by_month, on="month", how="left")
+        .merge(churned_by_month, on="month", how="left")
+        .merge(mrr_by_month_2, on="month", how="left")
+        .fillna({"new_customers": 0, "churned_customers": 0})
+        .sort_values("month")
+    )
+
+    # Churn rate = churned / active previous month
+    cust_month["active_prev"] = cust_month["active_customers"].shift(1)
+    cust_month["churn_rate_pct"] = np.where(
+        cust_month["active_prev"] > 0,
+        cust_month["churned_customers"] / cust_month["active_prev"] * 100,
+        np.nan
+    )
+
+    # ARPA = MRR / active customers
+    cust_month["arpa"] = np.where(
+        cust_month["active_customers"] > 0,
+        cust_month["mrr"] / cust_month["active_customers"],
+        np.nan
+    )
+
+    # Customer Lifetime (months) = 1 / churn_rate (use decimal, protect divide-by-zero)
+    churn_decimal = cust_month["churn_rate_pct"] / 100.0
+    cust_month["lifetime_months"] = np.where(
+        churn_decimal > 0, 1.0 / churn_decimal, np.nan
+    )
+
+    # Prepare for charts
+    cust_month_plot = cust_month.copy()
+    cust_month_plot["month"] = cust_month_plot["month"].astype(str)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Active Customers (latest)",
+                  int(cust_month["active_customers"].iloc[-1]))
+    with col2:
+        latest_churn = cust_month["churn_rate_pct"].iloc[-1]
+        st.metric("Churn Rate (latest)",
+                  f"{latest_churn:.2f}%" if pd.notna(latest_churn) else "—")
+    with col3:
+        latest_arpa = cust_month["arpa"].iloc[-1]
+        st.metric("ARPA (latest)", f"€{latest_arpa:,.2f}" if pd.notna(latest_arpa) else "—")
+
+    st.subheader("Active / New / Churned Customers")
+    fig_counts = px.line(
+        cust_month_plot,
+        x="month",
+        y=["active_customers", "new_customers", "churned_customers"],
+        markers=True,
+        labels={"value": "Customers", "variable": "Metric"},
+        title="Customer Counts Over Time"
+    )
+    st.plotly_chart(fig_counts, use_container_width=True)
+
+    st.subheader("Churn Rate (%)")
+    fig_churn = px.line(
+        cust_month_plot, x="month", y="churn_rate_pct", markers=True,
+        labels={"churn_rate_pct": "Churn Rate (%)"},
+        title="Customer Churn Rate (MoM)"
+    )
+    st.plotly_chart(fig_churn, use_container_width=True)
+
+    # --- ARPA chart ---
+    st.subheader("ARPA (€)")
+    fig_arpa_only = px.line(
+        cust_month_plot,
+        x="month",
+        y="arpa",
+        markers=True,
+        labels={"arpa": "ARPA (€)", "month": "Month"},
+        title="Average Revenue per Account (ARPA)"
+    )
+    fig_arpa_only.update_layout(yaxis_title="ARPA (€)")
+    st.plotly_chart(fig_arpa_only, use_container_width=True)
+
+    # --- Lifetime chart ---
+    st.subheader("Estimated Customer Lifetime (months)")
+    fig_lifetime_only = px.line(
+        cust_month_plot,
+        x="month",
+        y="lifetime_months",
+        markers=True,
+        labels={"lifetime_months": "Lifetime (months)", "month": "Month"},
+        title="Estimated Customer Lifetime"
+    )
+    fig_lifetime_only.update_layout(yaxis_title="Months")
+    st.plotly_chart(fig_lifetime_only, use_container_width=True)
+
+    st.dataframe(
+        cust_month.rename(columns={
+            "month": "Month",
+            "active_customers": "Active",
+            "new_customers": "New",
+            "churned_customers": "Churned",
+            "churn_rate_pct": "Churn Rate (%)",
+            "arpa": "ARPA (€)",
+            "lifetime_months": "Lifetime (months)",
+            "mrr": "MRR (€)"
+        }),
+        use_container_width=True
+    )
+
 
 with tab3:
     st.header("💰 Value Metrics")
