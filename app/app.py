@@ -359,8 +359,171 @@ with tab2:
 
 with tab3:
     st.header("💰 Value Metrics")
-    # show LTV, CAC, LTV/CAC, Payback period
-    # charts: CAC by channel bar chart
+    st.divider()
+
+    # ---- Controls ----
+    gross_margin_pct = st.slider("Assumed Gross Margin (%)", 40, 99, 80, step=1)
+    gm = gross_margin_pct / 100.0
+
+    # ---- Pre-compute monthly keys ----
+    subs["month"] = subs["period_start"].dt.to_period("M")
+    events["month"] = events["date"].dt.to_period("M")
+    customers["signup_month"] = customers["signup_date"].dt.to_period("M")
+
+    # ---- ARPA (for LTV & Payback) ----
+    active_by_month_v = (
+        subs.groupby("month")["customer_id"].nunique().reset_index(name="active_customers")
+    )
+    mrr_by_month_v = subs.groupby("month")["mrr"].sum().reset_index(name="mrr")
+    kpi_base = active_by_month_v.merge(mrr_by_month_v, on="month", how="left")
+    kpi_base["arpa"] = np.where(kpi_base["active_customers"] > 0,
+                                kpi_base["mrr"] / kpi_base["active_customers"], np.nan)
+
+    # ---- Churn rate (customers) ----
+    cm = subs.groupby(["customer_id", "month"], as_index=False)["mrr"].sum().sort_values(["customer_id","month"])
+    prev = cm.rename(columns={"mrr":"mrr_prev"}).copy()
+    prev["month"] = prev["month"] + 1  # align prev->current
+    cur_prev = cm.merge(prev, on=["customer_id","month"], how="outer").fillna(0)
+    churned_rows = cur_prev[(cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0)]
+    churned_by_month_v = churned_rows.groupby("month")["customer_id"].nunique().reset_index(name="churned")
+
+    kpi_base = kpi_base.merge(churned_by_month_v, on="month", how="left").fillna({"churned":0})
+    kpi_base["active_prev"] = kpi_base["active_customers"].shift(1)
+    kpi_base["churn_rate"] = np.where(
+        kpi_base["active_prev"] > 0, kpi_base["churned"] / kpi_base["active_prev"], np.nan
+    )  # decimal (e.g., 0.025)
+
+    # ---- CAC (overall) ----
+    mkt_month = (events.groupby("month")[["spend","conversions"]].sum().reset_index())
+    mkt_month["cac"] = np.where(mkt_month["conversions"] > 0,
+                                mkt_month["spend"] / mkt_month["conversions"], np.nan)
+
+    # ---- CAC by channel (Google Ads vs LinkedIn Ads, all months) ----
+    channels_keep = ["Google Ads", "LinkedIn Ads"]
+
+    cac_month_ch = (
+        events.query("channel in @channels_keep")
+              .groupby(["month", "channel"], as_index=False)[["spend", "conversions"]]
+              .sum()
+    )
+
+    # ensure every month-channel pair exists
+    all_months = pd.period_range(events["date"].min().to_period("M"),
+                                 events["date"].max().to_period("M"),
+                                 freq="M")
+    full_index = pd.MultiIndex.from_product([all_months, channels_keep], names=["month","channel"])
+    cac_month_ch = (
+        cac_month_ch.set_index(["month","channel"])
+                    .reindex(full_index)
+                    .reset_index()
+    )
+    cac_month_ch[["spend","conversions"]] = cac_month_ch[["spend","conversions"]].fillna(0)
+    cac_month_ch["cac"] = np.where(cac_month_ch["conversions"] > 0,
+                                   cac_month_ch["spend"] / cac_month_ch["conversions"],
+                                   np.nan)
+
+    # ---- LTV, LTV/CAC, Payback ----
+    vals = kpi_base.merge(mkt_month[["month","cac"]], on="month", how="left")
+    vals["ltv"] = np.where(
+        (vals["arpa"].notna()) & (vals["churn_rate"] > 0),
+        vals["arpa"] * gm / vals["churn_rate"],
+        np.nan
+    )
+    vals["ltv_cac"] = np.where((vals["ltv"].notna()) & (vals["cac"] > 0),
+                               vals["ltv"] / vals["cac"], np.nan)
+    vals["payback_months"] = np.where((vals["cac"] > 0) & (vals["arpa"] > 0),
+                                      vals["cac"] / vals["arpa"], np.nan)
+
+    # ---- Latest KPIs row ----
+    latest_row = vals.loc[vals["month"].idxmax()]
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("CAC (latest)", f"€{latest_row['cac']:,.2f}" if pd.notna(latest_row["cac"]) else "—")
+    with c2:
+        st.metric("LTV (latest)", f"€{latest_row['ltv']:,.2f}" if pd.notna(latest_row["ltv"]) else "—")
+    with c3:
+        st.metric("LTV/CAC (latest)", f"{latest_row['ltv_cac']:.2f}" if pd.notna(latest_row["ltv_cac"]) else "—")
+    with c4:
+        st.metric("Payback (months, latest)", f"{latest_row['payback_months']:.2f}" if pd.notna(latest_row["payback_months"]) else "—")
+
+    # ---- Charts ----
+    vals_plot = vals.copy()
+    vals_plot["month"] = vals_plot["month"].astype(str)
+
+    st.subheader("CAC Over Time (All Channels)")
+    fig_cac = px.line(vals_plot, x="month", y="cac", markers=True, title="CAC Over Time")
+    fig_cac.update_layout(yaxis_title="CAC (€)")
+    st.plotly_chart(fig_cac, use_container_width=True)
+
+    st.subheader("CAC by Channel")
+
+    plot_cac = cac_month_ch.copy()
+    plot_cac["month"] = plot_cac["month"].astype(str)
+
+    fig_cac_ch_all = px.bar(
+        plot_cac,
+        x="month",
+        y="cac",
+        color="channel",
+        barmode="group",                     
+        title="CAC by Channel Over Time",
+        labels={"cac": "CAC (€)", "month": "Month", "channel": "Channel"}
+    )
+
+    # keep months in chronological order and readable
+    fig_cac_ch_all.update_layout(
+        xaxis={"type": "category", "categoryorder": "category ascending"},
+        yaxis_title="CAC (€)"
+    )
+
+    st.plotly_chart(fig_cac_ch_all, use_container_width=True)
+
+
+    # --- LTV chart (separate) ---
+    st.subheader("LTV Over Time")
+    fig_ltv_only = px.line(
+        vals_plot,
+        x="month",
+        y="ltv",
+        markers=True,
+        title="Customer Lifetime Value (LTV)"
+    )
+    fig_ltv_only.update_layout(yaxis_title="LTV (€)")
+    st.plotly_chart(fig_ltv_only, use_container_width=True)
+
+    # --- Payback chart (separate) ---
+    st.subheader("Payback Period Over Time")
+    fig_payback_only = px.line(
+        vals_plot,
+        x="month",
+        y="payback_months",
+        markers=True,
+        title="Payback Period (months)"
+    )
+    fig_payback_only.update_layout(yaxis_title="Months")
+    st.plotly_chart(fig_payback_only, use_container_width=True)
+
+
+    st.subheader("LTV/CAC Ratio Over Time")
+    fig_ratio = px.line(vals_plot, x="month", y="ltv_cac", markers=True, title="LTV/CAC Ratio")
+    fig_ratio.update_layout(yaxis_title="Ratio")
+    st.plotly_chart(fig_ratio, use_container_width=True)
+
+    # ---- Table ----
+    st.dataframe(
+        vals.rename(columns={
+            "month":"Month",
+            "arpa":"ARPA (€)",
+            "churn_rate":"Churn (decimal)",
+            "cac":"CAC (€)",
+            "ltv":"LTV (€)",
+            "ltv_cac":"LTV/CAC",
+            "payback_months":"Payback (months)"
+        }),
+        use_container_width=True
+    )
+
+
 
 with tab4:
     st.header("📈 Retention & Cohorts")
