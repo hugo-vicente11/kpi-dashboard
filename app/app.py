@@ -507,8 +507,150 @@ with tab3:
 
 with tab4:
     st.header("📈 Retention & Cohorts")
-    # show NRR, GRR
-    # charts: cohort heatmap, retention curve
+    st.divider()
+
+    # ---------- Canonical month fields ----------
+    subs["month"] = subs["period_start"].dt.to_period("M")
+    customers["cohort"] = customers["signup_date"].dt.to_period("M")
+
+    # ========= Revenue Retention (GRR & NRR) =========
+    # Per-customer monthly MRR
+    cm = (
+        subs.groupby(["customer_id", "month"], as_index=False)["mrr"]
+            .sum()
+            .sort_values(["customer_id", "month"])
+    )
+
+    # Align prev-month MRR to current month
+    prev = cm.rename(columns={"mrr": "mrr_prev"}).copy()
+    prev["month"] = prev["month"] + 1  # shift forward to align prev -> current
+
+    cur_prev = cm.merge(prev, on=["customer_id", "month"], how="outer")
+
+    # Trim ghost months strictly to observed months in subs
+    valid_min, valid_max = cm["month"].min(), cm["month"].max()
+    cur_prev = cur_prev[(cur_prev["month"] >= valid_min) & (cur_prev["month"] <= valid_max)]
+
+    # Clean NaNs for arithmetic
+    cur_prev[["mrr", "mrr_prev"]] = cur_prev[["mrr", "mrr_prev"]].fillna(0)
+
+    # Classify movements (exclude NEW from retention base)
+    cur_prev["is_base"]       = (cur_prev["mrr_prev"] > 0).astype(int)
+    cur_prev["new_mrr"]       = np.where((cur_prev["mrr_prev"] == 0) & (cur_prev["mrr"] > 0), cur_prev["mrr"], 0.0)
+    cur_prev["churn_mrr"]     = np.where((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0), cur_prev["mrr_prev"], 0.0)
+    cur_prev["contraction"]   = np.where((cur_prev["mrr_prev"] > cur_prev["mrr"]) & (cur_prev["mrr"] > 0),
+                                         cur_prev["mrr_prev"] - cur_prev["mrr"], 0.0)
+    cur_prev["expansion"]     = np.where((cur_prev["mrr"] > cur_prev["mrr_prev"]) & (cur_prev["mrr_prev"] > 0),
+                                         cur_prev["mrr"] - cur_prev["mrr_prev"], 0.0)
+
+    # Aggregate per month
+    mov_ret = (
+        cur_prev.groupby("month", as_index=False)
+               .agg(base_mrr=("mrr_prev", lambda s: s[s > 0].sum()),
+                    churn=("churn_mrr", "sum"),
+                    contraction=("contraction", "sum"),
+                    expansion=("expansion", "sum"))
+    )
+
+    # Keep only real months visible in data
+    valid_months = set(cm["month"].unique())
+    mov_ret = mov_ret[mov_ret["month"].isin(valid_months)].copy()
+
+    # GRR / NRR (exclude NEW from numerator; base is prior-month MRR>0)
+    mov_ret["grr"] = np.where(mov_ret["base_mrr"] > 0,
+                              (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"]) /
+                              mov_ret["base_mrr"] * 100, np.nan)
+    mov_ret["nrr"] = np.where(mov_ret["base_mrr"] > 0,
+                              (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"] + mov_ret["expansion"]) /
+                              mov_ret["base_mrr"] * 100, np.nan)
+
+    # Plot GRR & NRR
+    mov_plot = mov_ret.copy()
+    mov_plot["month"] = mov_plot["month"].astype(str)
+
+    st.subheader("Revenue Retention Over Time (GRR & NRR)")
+    fig_ret = px.line(
+        mov_plot,
+        x="month",
+        y=["grr", "nrr"],
+        markers=True,
+        labels={"value": "Retention (%)", "variable": "Metric"},
+        title="Gross Revenue Retention (GRR) and Net Revenue Retention (NRR)"
+    )
+    fig_ret.update_layout(yaxis_title="Retention (%)")
+    st.plotly_chart(fig_ret, use_container_width=True)
+
+    # ========= Cohort Retention Heatmap (Logos) =========
+    st.subheader("Cohort Retention Heatmap (Logos)")
+
+    # Active flag per customer-month (logo retention uses presence, not €)
+    active = (
+        subs.groupby(["customer_id", "month"], as_index=False)["mrr"]
+            .sum()
+    )
+    active["is_active"] = active["mrr"] > 0
+
+    # Attach each customer's signup cohort
+    active = active.merge(customers[["customer_id", "cohort"]], on="customer_id", how="left")
+
+    # Count active customers by cohort vs month
+    cohort_active = (
+        active[active["is_active"]]
+        .groupby(["cohort", "month"], as_index=False)["customer_id"]
+        .nunique()
+        .rename(columns={"customer_id": "active_customers"})
+    )
+
+    # Cohort sizes (how many signed up in each cohort)
+    cohort_sizes = customers.groupby("cohort", as_index=False)["customer_id"].nunique()
+    cohort_sizes = cohort_sizes.rename(columns={"customer_id": "cohort_size"})
+
+    # Pivot active table and normalize by cohort size
+    coh_piv = cohort_active.pivot_table(index="cohort", columns="month",
+                                        values="active_customers", fill_value=0)
+
+    # Align cohort_size index to pivot’s index
+    cs = cohort_sizes.set_index("cohort").reindex(coh_piv.index)["cohort_size"]
+
+    # Avoid division by zero
+    retention = coh_piv.divide(cs.replace(0, np.nan), axis=0) * 100
+
+    # Show only months observed in subs
+    observed_months_sorted = sorted(list(valid_months))
+    retention = retention.reindex(columns=observed_months_sorted)
+
+    # Pretty axis labels
+    retention_plot = retention.copy()
+    retention_plot.index = retention_plot.index.astype(str)
+    retention_plot.columns = retention_plot.columns.astype(str)
+
+    fig_heat = px.imshow(
+        retention_plot,
+        labels=dict(x="Month", y="Cohort (Signup Month)", color="Retention (%)"),
+        color_continuous_scale="Blues",
+        aspect="auto"
+    )
+    fig_heat.update_xaxes(side="top")
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    # ========= Monthly Retention Summary =========
+    st.subheader("Monthly Retention Summary")
+    summary_disp = mov_ret.copy()
+    summary_disp["Month"] = summary_disp["month"].astype(str)
+    summary_disp = summary_disp.drop(columns=["month"])
+    summary_disp = summary_disp.rename(columns={
+        "base_mrr": "Base MRR (€)",
+        "churn": "Churn (€)",
+        "contraction": "Contraction (€)",
+        "expansion": "Expansion (€)",
+        "grr": "GRR (%)",
+        "nrr": "NRR (%)"
+    })
+    summary_disp[["GRR (%)", "NRR (%)"]] = summary_disp[["GRR (%)", "NRR (%)"]].round(2)
+    st.dataframe(summary_disp, use_container_width=True)
+
+
+
 
 with tab5:
     st.header("📊 Funnel & Marketing")
@@ -774,6 +916,3 @@ with tab6:
         }).assign(**{"Churn Rate (%)": lambda d: d["Churn Rate (%)"].round(2)}),
         use_container_width=True
 )
-
-
-
