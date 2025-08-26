@@ -1,97 +1,190 @@
-# Junitec KPI Copilot — Dataset & Guia de Arranque
+# 📊 SaaS KPI Dashboard
 
-Este repositório contém **dados sintéticos (18 meses)** e um **guia base** para construíres um MVP de Dashboard de KPIs para Startups/PMEs com um **Copiloto de AI** (Q&A sobre os dados).
-
-## 📦 Conteúdo
-- `customers.csv` — clientes, data de registo, plano inicial, país, canal de aquisição.
-- `subscriptions.csv` — *snapshot mensal por cliente* com o plano ativo, MRR e período.
-- `events_marketing.csv` — agregados mensais por canal (visitas, trials, conversões, spend).
-- `prompt_copiloto.md` — prompt afinado para ligares o teu módulo de AI.
-
-Período coberto: **Mar/2024 → Ago/2025** (18 meses).  
-Domínio fictício: SaaS B2B com planos **Basic/Pro/Enterprise**.
-
-## 🧠 KPIs recomendados
-- **MRR** (Monthly Recurring Revenue) total e por *movimentos* (New/Expansion/Contraction/Churned).
-- **Logo churn** (clientes perdidos), **Revenue churn** (MRR perdido).
-- **Cohorts de retenção** (por mês de signup).
-- **CAC por canal** = `spend / conversions`.
-- **LTV (simples)** = `ARPA × margem_bruta / churn_rate`.
-- **LTV/CAC** como razão de eficiência.
-
-> Dica: Mantém as funções de métricas **puras** e testáveis (ex.: `metrics.py`), e a UI no `app.py` (Streamlit).
-
-## 🚀 Quickstart (CSV + Streamlit)
-1. Cria ambiente:
-   ```bash
-   python -m venv .venv && source .venv/bin/activate  # (Linux/macOS)
-   # Windows: .venv\Scripts\activate
-   pip install streamlit pandas plotly pydantic python-dateutil
-   ```
-2. Estrutura de pastas sugerida:
-   ```
-   app.py
-   /services/metrics.py
-   /services/ai.py
-   /data/customers.csv
-   /data/subscriptions.csv
-   /data/events_marketing.csv
-   ```
-3. Carrega dados no `app.py` (exemplo mínimo):
-   ```python
-   import streamlit as st, pandas as pd
-   customers = pd.read_csv("data/customers.csv", parse_dates=["signup_date"])
-   subs = pd.read_csv("data/subscriptions.csv", parse_dates=["period_start","period_end"])
-   events = pd.read_csv("data/events_marketing.csv", parse_dates=["date"])
-   st.title("KPI Copilot — Junitec")
-   st.write("MRR (amostra):", subs.groupby(subs["period_start"].dt.to_period("M"))["mrr"].sum().tail())
-   ```
-4. Correr:
-   ```bash
-   streamlit run app.py
-   ```
-
-## 🧩 Esquemas dos ficheiros
-### `customers.csv`
-| coluna | tipo | exemplo |
-|---|---|---|
-| customer_id | string | C0001 |
-| signup_date | date(YYYY-MM-DD) | 2024-03-14 |
-| plan_at_signup | enum(Basic, Pro, Enterprise) | Pro |
-| country | enum(PT, ES, FR, DE, UK) | PT |
-| acquisition_channel | enum(Organic, Google Ads, LinkedIn Ads, Referral) | Google Ads |
-
-### `subscriptions.csv`  *(1 linha por cliente por mês ativo)*
-| coluna | tipo | exemplo |
-|---|---|---|
-| subscription_id | string | C0001-00 |
-| customer_id | string | C0001 |
-| period_start | date | 2024-03-01 |
-| period_end | date | 2024-03-31 |
-| plan | enum(Basic, Pro, Enterprise) | Pro |
-| mrr | float | 55.0 |
-| is_active | int(0/1) | 1 |
-
-### `events_marketing.csv` *(agregado mensal por canal)*
-| coluna | tipo | exemplo |
-|---|---|---|
-| date | date | 2024-03-01 |
-| channel | enum(Organic, Google Ads, LinkedIn Ads, Referral) | LinkedIn Ads |
-| visits | int | 920 |
-| trials | int | 260 |
-| conversions | int | 12 |
-| spend | float | 1840.50 |
-
-## 🧪 Testes
-- Garante fórmulas estáveis com `pytest` (ex.: `test_mrr_movements.py`, `test_churn.py`).
-- Usa dados pequenos de amostra para validar antes de carregar tudo.
-
-## 🧱 Roadmap (sugestão)
-- Conectores reais: Stripe, GA4, HubSpot.
-- Alertas proativos (email/Slack) em caso de anomalias.
-- Q&A com grounding nos números do mês e *playbooks* de ação.
-- Multi-tenant para uso em consultoria (templates por setor).
+An interactive **Streamlit** app for monitoring core SaaS metrics from your own CSVs. It turns raw **subscriptions**, **customers**, and **marketing events** into clean charts and tables for **Revenue & Growth, Customer Metrics, Value Metrics, Retention & Cohorts, Funnel & Marketing, and Segmentation**.
 
 ---
 
-© 2025 — Dataset sintético gerado para fins de demonstração.
+## ✨ What you get
+
+### 🏦 Revenue & Growth
+- **MRR** and **ARR** time series
+- **MRR Movements**: New, Expansion, Contraction, Churned, and Net New MRR
+- **MoM Growth Rate**
+- Monthly summary table
+
+### 👥 Customer Metrics
+- **Active / New / Churned customers**
+- **Churn Rate (MoM)**
+- **ARPA** (Average Revenue per Account)
+- **Estimated Customer Lifetime** (in months)
+
+### 💰 Value Metrics
+- **CAC** (overall + by channel)
+- **LTV**, **LTV/CAC**, **Payback Period**
+- Metrics computed from your **gross margin slider**
+
+### 📈 Retention & Cohorts
+- **GRR (Gross Revenue Retention)** and **NRR (Net Revenue Retention)**
+- **Cohort Retention Heatmap** (logos-based)
+- **Monthly Retention Summary** table
+
+### 📊 Funnel & Marketing
+- **Conversion rates**: Visits → Trials, Trials → Paid, Overall
+- **Spend by Channel** over time
+- Monthly **Funnel & Marketing Summary** table
+
+### 🌍 Segmentation
+- **MRR by Plan, Country, and Acquisition Channel**
+- **Churn by Segment** (Plan/Country/Channel) using previous-month attribution
+
+---
+
+## 🧱 Repository structure
+
+```
+├── app/
+│   └── app.py                  # Main Streamlit app
+├── data/
+│   ├── customers.csv           # Customer signup & attributes
+│   ├── subscriptions.csv       # Monthly MRR by customer/plan
+│   └── events_marketing.csv    # Visits, trials, conversions, spend by channel
+└── README.md
+```
+
+---
+
+## 📄 Data contracts
+
+Your CSVs must include the columns below (extra columns are OK).
+
+### `customers.csv`
+- `customer_id` (string/int)
+- `signup_date` (ISO date)
+- Optional: `country`
+- Optional: `channel` **or** `acquisition_channel`
+
+### `subscriptions.csv`
+- `customer_id`
+- `plan` (e.g., Basic / Pro / Enterprise)
+- `period_start`
+- `period_end`
+- `mrr` (numeric, monthly recurring revenue for that row)
+
+### `events_marketing.csv`
+- `date` (ISO date)
+- `channel` (e.g., Google Ads, LinkedIn Ads, Organic, Referral)
+- `visits` (int)
+- `trials` (int)
+- `conversions` (int)
+- `spend` (numeric)
+
+---
+
+## ▶️ Quick start
+
+1. Clone and enter the repo
+
+```bash
+git clone https://github.com/yourusername/kpi-dashboard.git
+cd kpi-dashboard
+```
+
+2. Create a virtual environment (recommended)
+
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+```
+
+3. Install deps
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Put your CSVs in `./data/` with the column names above.
+
+5. Run the app
+
+```bash
+streamlit run app/app.py
+```
+
+The app opens at **http://localhost:8501**.
+
+---
+
+## 📦 Requirements
+
+`requirements.txt` (minimum):
+
+```
+streamlit
+pandas
+numpy
+plotly
+```
+
+---
+
+## 🧠 How metrics are computed (high level)
+
+- **Month keys**: all time series are keyed by `Period[M]` for robust joins.
+- **MRR Movements**:
+  - Compare each customer’s `mrr` this month vs last (`mrr_prev`) to classify **New**, **Expansion**, **Contraction**, **Churned**.
+- **GRR / NRR**:
+  - From customers with **positive prior MRR** (base), apply churn/contraction/expansion and compute:
+    - `GRR = (Base − Churn − Contraction) / Base`
+    - `NRR = (Base − Churn − Contraction + Expansion) / Base`
+- **CAC / LTV**:
+  - `CAC = Spend / Conversions` per month (and by channel when applicable)
+  - `ARPA = MRR / Active Customers`
+  - `Churn Rate` uses prior-month active base
+  - `LTV = (ARPA * GrossMargin) / ChurnRate`
+  - `Payback = CAC / ARPA`
+- **Funnel**:
+  - `Visits → Trials`, `Trials → Paid`, `Overall` expressed in **%** by month.
+- **Segmentation churn**:
+  - Attributes churn to the **previous month’s segment** (plan/country/channel) to avoid leakage.
+
+---
+
+## 🧩 Configuration notes
+
+- Acquisition channel column is auto-detected:
+  - `channel` → else `acquisition_channel` → else channel-based views are skipped with a friendly message.
+- CAC by channel currently highlights `["Google Ads", "LinkedIn Ads"]`. Adjust `CHANNELS_KEEP` in `app.py`.
+- All charts are **Plotly** for hover and legend control; legends and tooltips are prettified.
+
+---
+
+## 🔌 Optional AI assistant (roadmap)
+
+You can add a Q&A assistant to answer natural language questions like:
+> “What was NRR last quarter?”  
+> “Show MRR growth vs CAC for the last 6 months.”
+
+Implementation sketch:
+- Add a new **“🤖 Ask the Data”** tab.
+- Summarize current filtered DataFrames to structured text.
+- Send the summaries + user question to your LLM (e.g., OpenAI) with guardrails.
+- Render results and optionally generate ad-hoc Plotly charts.
+
+(Requires adding `openai` and `OPENAI_API_KEY`.)
+
+---
+
+## 🧪 Tips & troubleshooting
+
+- If a chart shows a future/nonexistent month, ensure data joins are filtered to **observed months only** (the app already guards with `VALID_MONTHS`).
+- If “MRR by Country/Channel” is missing, check that the expected columns exist in `customers.csv`.
+- Ensure dates parse correctly; files must use ISO‐like formats (YYYY-MM-DD).
+
+---
+
+## 🙌 Acknowledgements
+
+Thanks to the open-source community behind **Streamlit, Pandas, NumPy, and Plotly**.
