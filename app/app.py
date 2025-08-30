@@ -4,11 +4,13 @@ import numpy as np
 import plotly.express as px
 from pathlib import Path
 
+# Project paths
 BASE = Path(__file__).resolve().parents[1]
 DATA = BASE / "data"
 
 @st.cache_data
 def load_data():
+    """Load core CSVs once per session; parse dates for time ops."""
     cust = pd.read_csv(DATA / "customers.csv", parse_dates=["signup_date"])
     subs = pd.read_csv(DATA / "subscriptions.csv", parse_dates=["period_start", "period_end"])
     events = pd.read_csv(DATA / "events_marketing.csv", parse_dates=["date"])
@@ -16,6 +18,7 @@ def load_data():
 
 customers, subs, events = load_data()
 
+# Keep originals clean; add normalized time keys
 subs = subs.copy()
 events = events.copy()
 customers = customers.copy()
@@ -23,8 +26,11 @@ subs["month"] = subs["period_start"].dt.to_period("M")
 events["month"] = events["date"].dt.to_period("M")
 customers["signup_month"] = customers["signup_date"].dt.to_period("M")
 customers["cohort"] = customers["signup_month"]
+
+# Support both possible channel column names; None if absent
 CHANNEL_COL = "channel" if "channel" in customers.columns else ("acquisition_channel" if "acquisition_channel" in customers.columns else None)
 
+# --- Revenue aggregates ---
 mrr_by_month = (
     subs.groupby("month", as_index=False)["mrr"]
         .sum()
@@ -40,19 +46,26 @@ active_by_month = (
         .sort_values("month")
 )
 
+# Per-customer per-month MRR to compute movements
 cm = (
     subs.groupby(["customer_id", "month"], as_index=False)["mrr"]
         .sum()
         .sort_values(["customer_id", "month"])
 )
+
+# Lagged frame to compare current vs previous month MRR
 cm_prev = cm.rename(columns={"mrr": "mrr_prev"}).copy()
-cm_prev["month"] = cm_prev["month"] + 1
+cm_prev["month"] = cm_prev["month"] + 1  # shift forward to align month t with t-1
+
 cur_prev = cm.merge(cm_prev, on=["customer_id", "month"], how="outer")
 cur_prev[["mrr", "mrr_prev"]] = cur_prev[["mrr", "mrr_prev"]].fillna(0)
+
+# Restrict to observed period range only
 VALID_MIN, VALID_MAX = cm["month"].min(), cm["month"].max()
 cur_prev = cur_prev[(cur_prev["month"] >= VALID_MIN) & (cur_prev["month"] <= VALID_MAX)]
 VALID_MONTHS = set(cm["month"].unique())
 
+# MRR movement buckets (new/expansion/contraction/churn)
 mov_month = (
     cur_prev.assign(
         new_mrr=np.where((cur_prev["mrr_prev"] == 0) & (cur_prev["mrr"] > 0), cur_prev["mrr"], 0.0),
@@ -64,15 +77,18 @@ mov_month = (
     .sum()
     .sort_values("month")
 )
+# Exclude last month to avoid partial movement artifacts
 if len(mov_month) > 0:
     mov_month = mov_month.iloc[:-1]
 mov_month["net_new_mrr"] = mov_month["new_mrr"] + mov_month["expansion_mrr"] - mov_month["contraction_mrr"] - mov_month["churned_mrr"]
 
+# --- Marketing aggregates ---
 events_month = (
     events.groupby("month", as_index=False)[["visits","trials","conversions","spend"]]
           .sum()
           .sort_values("month")
 )
+# Guard against divide-by-zero
 events_month["cac"] = np.where(events_month["conversions"] > 0, events_month["spend"] / events_month["conversions"], np.nan)
 
 events_month_channel = (
@@ -80,10 +96,12 @@ events_month_channel = (
           .sum()
           .sort_values(["month","channel"])
 )
+# Focus on primary paid channels for CAC split
 CHANNELS_KEEP = ["Google Ads", "LinkedIn Ads"]
 events_month_channel_gl = events_month_channel[events_month_channel["channel"].isin(CHANNELS_KEEP)].copy()
 events_month_channel_gl["cac"] = np.where(events_month_channel_gl["conversions"] > 0, events_month_channel_gl["spend"] / events_month_channel_gl["conversions"], np.nan)
 
+# --- Enrich subscriptions with segmentation columns (if present) ---
 seg_cols = ["customer_id"]
 if "country" in customers.columns:
     seg_cols.append("country")
@@ -93,7 +111,7 @@ if CHANNEL_COL is not None:
 cust_seg = customers[seg_cols].copy()
 subs_seg = subs.merge(cust_seg, on="customer_id", how="left")
 
-
+# ---------- UI ----------
 st.set_page_config(page_title="KPI Dashboard", layout="wide")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -109,11 +127,13 @@ with tab1:
     st.header("🏦 Revenue & Growth")
     st.divider()
 
+    # Latest-run KPIs
     latest_period = mrr_by_month["month"].max()
     latest_mrr = float(mrr_by_month.loc[mrr_by_month["month"] == latest_period, "mrr_total"].iloc[0])
     prev_idx = mrr_by_month["month"] == latest_period
     prev_mrr_series = mrr_by_month["mrr_total"].shift(1)
     prev_mrr = float(prev_mrr_series[prev_idx].iloc[0]) if prev_idx.any() else None
+    # Handle None / zero gracefully
     growth_latest = ((latest_mrr - prev_mrr) / prev_mrr * 100) if (prev_mrr and prev_mrr != 0) else None
     latest_arr = latest_mrr * 12
 
@@ -143,6 +163,7 @@ with tab1:
     st.subheader("MRR Movements (New, Expansion, Contraction, Churned)")
     plot_df = mov_month.copy()
     plot_df["month_str"] = plot_df["month"].astype(str)
+    # Flip negative movements for divergent bar visual
     plot_long = (
         plot_df.assign(Contraction=-plot_df["contraction_mrr"], Churned=-plot_df["churned_mrr"], New=plot_df["new_mrr"], Expansion=plot_df["expansion_mrr"])
                 .melt(id_vars="month", value_vars=["New","Expansion","Contraction","Churned"], var_name="Movement", value_name="Amount")
@@ -160,6 +181,7 @@ with tab1:
     fig_growth = px.line(mrr_by_month_sorted, x="month_str", y="growth_rate", markers=True, title="MRR Growth Rate (Month-over-Month)", labels={"month_str":"Month","growth_rate":"Growth Rate (%)"})
     st.plotly_chart(fig_growth, use_container_width=True)
 
+    # Tabular summary (rounded for readability)
     mrr_month_tbl = mrr_by_month.rename(columns={"month":"month_per","mrr_total":"MRR (€)"}).copy()
     mrr_month_tbl["ARR (€)"] = mrr_month_tbl["MRR (€)"] * 12
     mrr_month_tbl["Growth Rate (%)"] = mrr_month_tbl["MRR (€)"].pct_change() * 100
@@ -178,6 +200,7 @@ with tab2:
     st.header("👥 Customer Metrics")
     st.divider()
 
+    # New and churned logo counts by month
     new_by_month = (
         customers.groupby("signup_month")["customer_id"]
                  .nunique()
@@ -190,6 +213,7 @@ with tab2:
 
     mrr_by_month_2 = mrr_by_month.rename(columns={"mrr_total":"mrr"}).copy()
 
+    # Combine into single customer-month frame
     cust_month = (
         active_by_month
         .merge(new_by_month, on="month", how="left")
@@ -199,6 +223,7 @@ with tab2:
         .sort_values("month")
     )
 
+    # Derived KPIs (guard NaNs)
     cust_month["active_prev"] = cust_month["active_customers"].shift(1)
     cust_month["churn_rate_pct"] = np.where(cust_month["active_prev"] > 0, cust_month["churned_customers"] / cust_month["active_prev"] * 100, np.nan)
     cust_month["arpa"] = np.where(cust_month["active_customers"] > 0, cust_month["mrr"] / cust_month["active_customers"], np.nan)
@@ -228,6 +253,7 @@ with tab2:
         title="Customer Counts Over Time"
     )
 
+    # Human-friendly legend/hover
     pretty_cust_names = {
         "active_customers": "Active Customers",
         "new_customers": "New Customers",
@@ -241,7 +267,6 @@ with tab2:
         )
     )
     st.plotly_chart(fig_counts, use_container_width=True)
-
 
     st.subheader("Churn Rate (%)")
     fig_churn = px.line(cust_month_plot, x="month_str", y="churn_rate_pct", markers=True, labels={"churn_rate_pct":"Churn Rate (%)","month_str":"Month"}, title="Customer Churn Rate (MoM)")
@@ -275,23 +300,29 @@ with tab3:
     st.header("💰 Value Metrics")
     st.divider()
 
+    # Keep GM user-adjustable for sensitivity
     gross_margin_pct = st.slider("Assumed Gross Margin (%)", 40, 99, 80, step=1)
     gm = gross_margin_pct / 100.0
 
     kpi_base = active_by_month.merge(mrr_by_month.rename(columns={"mrr_total":"mrr"}), on="month", how="left")
     kpi_base["arpa"] = np.where(kpi_base["active_customers"] > 0, kpi_base["mrr"] / kpi_base["active_customers"], np.nan)
 
+    # Logo churn count for churn rate
     churned_by_month_v = ((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0)).groupby(cur_prev["month"]).sum().reset_index(name="churned")
     kpi_base = kpi_base.merge(churned_by_month_v, on="month", how="left").fillna({"churned":0})
     kpi_base["active_prev"] = kpi_base["active_customers"].shift(1)
     kpi_base["churn_rate"] = np.where(kpi_base["active_prev"] > 0, kpi_base["churned"] / kpi_base["active_prev"], np.nan)
 
+    # Join CAC from marketing
     mkt_month = events_month[["month","cac"]].copy()
     vals = kpi_base.merge(mkt_month, on="month", how="left")
+
+    # Standard SaaS approximations
     vals["ltv"] = np.where((vals["arpa"].notna()) & (vals["churn_rate"] > 0), vals["arpa"] * gm / vals["churn_rate"], np.nan)
     vals["ltv_cac"] = np.where((vals["ltv"].notna()) & (vals["cac"] > 0), vals["ltv"] / vals["cac"], np.nan)
     vals["payback_months"] = np.where((vals["cac"] > 0) & (vals["arpa"] > 0), vals["cac"] / vals["arpa"], np.nan)
 
+    # Latest snapshot
     latest_row = vals.loc[vals["month"].idxmax()]
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -346,6 +377,7 @@ with tab4:
     st.header("📈 Retention & Cohorts")
     st.divider()
 
+    # Revenue retention components -> GRR/NRR
     mov_ret = (
         cur_prev.assign(
             base_mrr=np.where(cur_prev["mrr_prev"] > 0, cur_prev["mrr_prev"], 0.0),
@@ -372,7 +404,7 @@ with tab4:
         labels={"value": "Retention (%)", "month_str": "Month"},
         title="Gross Revenue Retention (GRR) and Net Revenue Retention (NRR)"
     )
-
+    # Clarify legend/hover
     pretty_ret_names = {
         "grr": "GRR (Gross Revenue Retention)",
         "nrr": "NRR (Net Revenue Retention)",
@@ -386,8 +418,7 @@ with tab4:
     )
     st.plotly_chart(fig_ret, use_container_width=True)
 
-
-    st.subheader("Cohort Retention Heatmap (Logos)")
+    # Cohort (logo) retention heatmap
     active = cm.copy()
     active["is_active"] = active["mrr"] > 0
     active = active.merge(customers[["customer_id","cohort"]], on="customer_id", how="left")
@@ -422,6 +453,7 @@ with tab5:
     st.header("📊 Funnel & Marketing")
     st.divider()
 
+    # Stage-to-stage conversion rates
     funnel = events_month.copy()
     funnel["visit_to_trial_rate"] = np.where(funnel["visits"] > 0, funnel["trials"] / funnel["visits"] * 100, np.nan)
     funnel["trial_to_paid_rate"] = np.where(funnel["trials"] > 0, funnel["conversions"] / funnel["trials"] * 100, np.nan)
@@ -453,7 +485,6 @@ with tab5:
         var_name="Metric",
         value_name="Rate",
     )
-
     conv_long["Metric"] = conv_long["Metric"].map(nice_names)
 
     fig_conv_bar = px.bar(
@@ -471,7 +502,6 @@ with tab5:
     )
     st.plotly_chart(fig_conv_bar, use_container_width=True)
 
-
     st.subheader("Spend per Channel (All Months)")
     spend_ch = events_month_channel[["month","channel","spend"]].copy()
     spend_ch["month_str"] = spend_ch["month"].astype(str)
@@ -479,6 +509,7 @@ with tab5:
     fig_spend.update_layout(xaxis={"type":"category","categoryorder":"category ascending"})
     st.plotly_chart(fig_spend, use_container_width=True)
 
+    # Wide summary table joining spend to funnel
     spend_wide = spend_ch.pivot_table(index="month", columns="channel", values="spend", fill_value=0)
     summary = (
         funnel[["month","visits","trials","conversions","visit_to_trial_rate","trial_to_paid_rate","overall_conv_rate"]]
@@ -528,6 +559,7 @@ with tab6:
     st.divider()
     st.subheader("Churn by Segment (monthly)")
 
+    # Aggregate per customer-month then build lagged comparison for churn
     agg_dict = {"mrr":"sum","plan":"last"}
     if "country" in subs_seg.columns:
         agg_dict["country"] = "last"
@@ -536,6 +568,7 @@ with tab6:
 
     per_cust = subs_seg.groupby(["customer_id","month"], as_index=False).agg(agg_dict).sort_values(["customer_id","month"])
 
+    # Prepare previous-period columns (names dynamic by availability)
     rename_prev = {"mrr":"mrr_prev","plan":"plan_prev"}
     if "country" in per_cust.columns:
         rename_prev["country"] = "country_prev"
@@ -543,13 +576,14 @@ with tab6:
         rename_prev[CHANNEL_COL] = f"{CHANNEL_COL}_prev"
 
     prev_seg = per_cust.rename(columns=rename_prev).copy()
-    prev_seg["month"] = prev_seg["month"] + 1
+    prev_seg["month"] = prev_seg["month"] + 1  # align t with t-1
 
     cur_prev_seg = per_cust.merge(prev_seg, on=["customer_id","month"], how="outer")
     min_m, max_m = subs_seg["month"].min(), subs_seg["month"].max()
     cur_prev_seg = cur_prev_seg[(cur_prev_seg["month"] >= min_m) & (cur_prev_seg["month"] <= max_m)]
     cur_prev_seg[["mrr","mrr_prev"]] = cur_prev_seg[["mrr","mrr_prev"]].fillna(0)
 
+    # Segment options constrained by available columns
     seg_options = ["plan"]
     if "country" in customers.columns:
         seg_options.append("country")
@@ -564,6 +598,7 @@ with tab6:
     )
     seg_prev_col = {"plan":"plan_prev","country":"country_prev"}.get(seg_choice, f"{CHANNEL_COL}_prev")
 
+    # Only consider prior active to compute churn by segment
     cur_prev_seg = cur_prev_seg[cur_prev_seg["mrr_prev"] > 0]
     cur_prev_seg = cur_prev_seg.dropna(subset=[seg_prev_col])
     cur_prev_seg["churned_flag"] = (cur_prev_seg["mrr_prev"] > 0) & (cur_prev_seg["mrr"] == 0)
