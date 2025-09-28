@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from pathlib import Path
+import google.generativeai as genai
+import json
 
 # Project paths
 BASE = Path(__file__).resolve().parents[1]
@@ -82,6 +84,37 @@ if len(mov_month) > 0:
     mov_month = mov_month.iloc[:-1]
 mov_month["net_new_mrr"] = mov_month["new_mrr"] + mov_month["expansion_mrr"] - mov_month["contraction_mrr"] - mov_month["churned_mrr"]
 
+# --- Customer metrics preparation ---
+# New and churned logo counts by month
+new_by_month = (
+    customers.groupby("signup_month")["customer_id"]
+             .nunique()
+             .reset_index()
+             .rename(columns={"signup_month":"month","customer_id":"new_customers"})
+             .sort_values("month")
+)
+churned_rows = cur_prev[(cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0)]
+churned_by_month = churned_rows.groupby("month")["customer_id"].nunique().reset_index(name="churned_customers")
+
+mrr_by_month_2 = mrr_by_month.rename(columns={"mrr_total":"mrr"}).copy()
+
+# Combine into single customer-month frame
+cust_month = (
+    active_by_month
+    .merge(new_by_month, on="month", how="left")
+    .merge(churned_by_month, on="month", how="left")
+    .merge(mrr_by_month_2, on="month", how="left")
+    .fillna({"new_customers":0, "churned_customers":0})
+    .sort_values("month")
+)
+
+# Derived KPIs (guard NaNs)
+cust_month["active_prev"] = cust_month["active_customers"].shift(1)
+cust_month["churn_rate_pct"] = np.where(cust_month["active_prev"] > 0, cust_month["churned_customers"] / cust_month["active_prev"] * 100, np.nan)
+cust_month["arpa"] = np.where(cust_month["active_customers"] > 0, cust_month["mrr"] / cust_month["active_customers"], np.nan)
+churn_decimal = cust_month["churn_rate_pct"] / 100.0
+cust_month["lifetime_months"] = np.where(churn_decimal > 0, 1.0 / churn_decimal, np.nan)
+
 # --- Marketing aggregates ---
 events_month = (
     events.groupby("month", as_index=False)[["visits","trials","conversions","spend"]]
@@ -111,6 +144,255 @@ if CHANNEL_COL is not None:
 cust_seg = customers[seg_cols].copy()
 subs_seg = subs.merge(cust_seg, on="customer_id", how="left")
 
+
+mov_ret = (
+    cur_prev.assign(
+        base_mrr=np.where(cur_prev["mrr_prev"] > 0, cur_prev["mrr_prev"], 0.0),
+        churn=np.where((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0), cur_prev["mrr_prev"], 0.0),
+        contraction=np.where((cur_prev["mrr_prev"] > cur_prev["mrr"]) & (cur_prev["mrr"] > 0), cur_prev["mrr_prev"] - cur_prev["mrr"], 0.0),
+        expansion=np.where((cur_prev["mrr"] > cur_prev["mrr_prev"]) & (cur_prev["mrr_prev"] > 0), cur_prev["mrr"] - cur_prev["mrr_prev"], 0.0)
+    )
+    .groupby("month", as_index=False)[["base_mrr","churn","contraction","expansion"]]
+    .sum()
+    .sort_values("month")
+)
+mov_ret = mov_ret[mov_ret["month"].isin(VALID_MONTHS)].copy()
+mov_ret["grr"] = np.where(mov_ret["base_mrr"] > 0, (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"]) / mov_ret["base_mrr"] * 100, np.nan)
+mov_ret["nrr"] = np.where(mov_ret["base_mrr"] > 0, (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"] + mov_ret["expansion"]) / mov_ret["base_mrr"] * 100, np.nan)
+
+# Configure Gemini AI
+def configure_ai():
+    """Configure Gemini AI with API key"""
+    api_key = st.secrets.get("GEMINI_API_KEY", "")
+    if not api_key:
+        st.sidebar.warning("⚠️ Add your Gemini API key to .streamlit/secrets.toml to enable the AI chatbot")
+        return None
+    
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    return model
+
+def get_data_context():
+    """Prepare comprehensive data context for AI queries"""
+
+    try:
+        # Revenue metrics with trends
+        mrr_growth_rates = mrr_by_month["mrr_total"].pct_change() * 100
+        recent_growth = mrr_growth_rates.tail(3).mean() if len(mrr_growth_rates) >= 3 else None
+        
+        # Customer acquisition and churn trends - convert Period index to string
+        monthly_new_customers = new_by_month.set_index('month')['new_customers'] if not new_by_month.empty else pd.Series()
+        if not monthly_new_customers.empty:
+            monthly_new_customers.index = monthly_new_customers.index.astype(str)
+            
+        monthly_churned = churned_by_month.set_index('month')['churned_customers'] if not churned_by_month.empty else pd.Series()
+        if not monthly_churned.empty:
+            monthly_churned.index = monthly_churned.index.astype(str)
+        
+        # Marketing efficiency
+        marketing_summary = events_month.copy()
+        total_spend = marketing_summary['spend'].sum() if not marketing_summary.empty else 0
+        total_conversions = marketing_summary['conversions'].sum() if not marketing_summary.empty else 0
+        avg_cac = total_spend / total_conversions if total_conversions > 0 else None
+        
+        # Channel performance
+        channel_performance = {}
+        if not events_month_channel.empty:
+            for channel in events_month_channel['channel'].unique():
+                channel_data = events_month_channel[events_month_channel['channel'] == channel]
+                channel_spend = channel_data['spend'].sum()
+                channel_conversions = channel_data['conversions'].sum()
+                channel_cac = channel_spend / channel_conversions if channel_conversions > 0 else None
+                channel_performance[channel] = {
+                    'total_spend': float(channel_spend),
+                    'total_conversions': int(channel_conversions),
+                    'cac': float(channel_cac) if channel_cac else None
+                }
+
+        # Revenue segments
+        plan_revenue = {}
+        if not subs.empty:
+            plan_summary = subs.groupby('plan')['mrr'].sum()
+            for plan, revenue in plan_summary.items():
+                plan_revenue[plan] = float(revenue)
+
+        # Retention analysis
+        retention_metrics = {}
+        if not mov_ret.empty:
+            latest_retention = mov_ret.iloc[-1] if len(mov_ret) > 0 else None
+            if latest_retention is not None:
+                retention_metrics = {
+                    'latest_grr': float(latest_retention['grr']) if pd.notna(latest_retention['grr']) else None,
+                    'latest_nrr': float(latest_retention['nrr']) if pd.notna(latest_retention['nrr']) else None,
+                    'avg_grr': float(mov_ret['grr'].mean()) if not mov_ret['grr'].empty else None,
+                    'avg_nrr': float(mov_ret['nrr'].mean()) if not mov_ret['nrr'].empty else None
+                }
+
+        # Cohort insights
+        cohort_insights = {}
+        if not customers.empty:
+            cohort_sizes = customers.groupby('cohort').size()
+            largest_cohort = cohort_sizes.idxmax() if not cohort_sizes.empty else None
+            cohort_insights = {
+                'total_cohorts': len(cohort_sizes),
+                'largest_cohort': str(largest_cohort) if largest_cohort else None,
+                'largest_cohort_size': int(cohort_sizes.max()) if not cohort_sizes.empty else None,
+                'avg_cohort_size': float(cohort_sizes.mean()) if not cohort_sizes.empty else None
+            }
+
+        # Business health indicators
+        latest_metrics = cust_month.iloc[-1] if not cust_month.empty else None
+        prev_metrics = cust_month.iloc[-2] if len(cust_month) > 1 else None
+        
+        health_indicators = {}
+        if latest_metrics is not None:
+            health_indicators = {
+                'mrr_trend': 'growing' if recent_growth and recent_growth > 0 else 'declining' if recent_growth and recent_growth < 0 else 'stable',
+                'customer_growth': float(latest_metrics['new_customers'] - latest_metrics['churned_customers']) if pd.notna(latest_metrics['new_customers']) and pd.notna(latest_metrics['churned_customers']) else None,
+                'churn_trend': 'improving' if prev_metrics is not None and pd.notna(latest_metrics['churn_rate_pct']) and pd.notna(prev_metrics['churn_rate_pct']) and latest_metrics['churn_rate_pct'] < prev_metrics['churn_rate_pct'] else 'worsening' if prev_metrics is not None and pd.notna(latest_metrics['churn_rate_pct']) and pd.notna(prev_metrics['churn_rate_pct']) and latest_metrics['churn_rate_pct'] > prev_metrics['churn_rate_pct'] else 'stable'
+            }
+
+        # Convert DataFrames to records with string conversion for Period columns
+        def convert_periods_to_string(df):
+            """Convert DataFrame with Period columns to JSON-serializable format"""
+            df_copy = df.copy()
+            for col in df_copy.columns:
+                if df_copy[col].dtype.name.startswith('period'):
+                    df_copy[col] = df_copy[col].astype(str)
+            return df_copy.to_dict('records')
+
+        # Comprehensive context
+        context = {
+            # Core metrics (existing) - convert Period columns
+            "mrr_summary": convert_periods_to_string(mrr_by_month),
+            "customer_metrics": convert_periods_to_string(cust_month),
+            "marketing_funnel": convert_periods_to_string(events_month) if not events_month.empty else [],
+            
+            # Enhanced latest metrics
+            "latest_metrics": {
+                "mrr": float(mrr_by_month["mrr_total"].iloc[-1]),
+                "arr": float(mrr_by_month["mrr_total"].iloc[-1] * 12),
+                "active_customers": int(active_by_month["active_customers"].iloc[-1]),
+                "latest_churn_rate": float(cust_month["churn_rate_pct"].iloc[-1]) if pd.notna(cust_month["churn_rate_pct"].iloc[-1]) else None,
+                "latest_arpa": float(cust_month["arpa"].iloc[-1]) if pd.notna(cust_month["arpa"].iloc[-1]) else None,
+                "recent_growth_rate": float(recent_growth) if recent_growth else None,
+                "total_customers_acquired": int(customers.shape[0]) if not customers.empty else 0
+            },
+            
+            # Revenue breakdown
+            "revenue_analysis": {
+                "plan_revenue_distribution": plan_revenue,
+                "mrr_movements": convert_periods_to_string(mov_month) if not mov_month.empty else [],
+                "average_monthly_growth": float(mrr_growth_rates.mean()) if not mrr_growth_rates.empty else None,
+                "growth_volatility": float(mrr_growth_rates.std()) if not mrr_growth_rates.empty else None
+            },
+            
+            # Customer insights
+            "customer_insights": {
+                "acquisition_trend": monthly_new_customers.to_dict() if not monthly_new_customers.empty else {},
+                "churn_trend": monthly_churned.to_dict() if not monthly_churned.empty else {},
+                "cohort_analysis": cohort_insights,
+                "retention_metrics": retention_metrics
+            },
+            
+            # Marketing performance
+            "marketing_analysis": {
+                "overall_cac": float(avg_cac) if avg_cac else None,
+                "total_marketing_spend": float(total_spend),
+                "total_conversions": int(total_conversions),
+                "channel_performance": channel_performance,
+                "conversion_funnel": {
+                    "avg_visit_to_trial": float(events_month['visit_to_trial_rate'].mean()) if not events_month.empty and 'visit_to_trial_rate' in events_month else None,
+                    "avg_trial_to_paid": float(events_month['trial_to_paid_rate'].mean()) if not events_month.empty and 'trial_to_paid_rate' in events_month else None
+                }
+            },
+            
+            # Business health
+            "business_health": health_indicators,
+            
+            # Data context
+            "data_periods": {
+                "start_month": str(mrr_by_month["month"].min()),
+                "end_month": str(mrr_by_month["month"].max()),
+                "total_months": len(mrr_by_month),
+                "data_completeness": {
+                    "has_customer_data": not customers.empty,
+                    "has_subscription_data": not subs.empty,
+                    "has_marketing_data": not events.empty
+                }
+            },
+            
+            # Comparative benchmarks (you can adjust these based on your industry)
+            "industry_context": {
+                "typical_saas_churn_rate": "5-7% monthly for B2B SaaS",
+                "healthy_growth_rate": "10-20% monthly for early stage",
+                "good_ltv_cac_ratio": "3:1 or higher",
+                "target_payback_period": "12-18 months"
+            }
+        }
+        
+        return context
+        
+    except Exception as e:
+        st.error(f"Error preparing context: {str(e)}")
+        return {
+            "mrr_summary": convert_periods_to_string(mrr_by_month),
+            "customer_metrics": convert_periods_to_string(cust_month),
+            "latest_metrics": {
+                "mrr": float(mrr_by_month["mrr_total"].iloc[-1]),
+                "arr": float(mrr_by_month["mrr_total"].iloc[-1] * 12),
+                "active_customers": int(active_by_month["active_customers"].iloc[-1])
+            },
+            "error": "Reduced context due to processing error"
+        }
+        
+    except Exception as e:
+        st.error(f"Error preparing context: {str(e)}")
+        return {
+            "mrr_summary": mrr_by_month.to_dict('records'),
+            "customer_metrics": cust_month.to_dict('records'),
+            "latest_metrics": {
+                "mrr": float(mrr_by_month["mrr_total"].iloc[-1]),
+                "arr": float(mrr_by_month["mrr_total"].iloc[-1] * 12),
+                "active_customers": int(active_by_month["active_customers"].iloc[-1])
+            },
+            "error": "Reduced context due to processing error"
+        }
+
+def query_ai_chatbot(model, question, context):
+    """Query the AI model with comprehensive business context"""
+    prompt = f"""
+    You are a senior SaaS business consultant. Analyze the data and provide CONCISE, actionable insights.
+
+    BUSINESS DATA CONTEXT:
+    {json.dumps(context, indent=2, default=str)}
+
+    USER QUESTION: {question}
+
+    RESPONSE FORMAT:
+    - Start directly with key findings - NO greetings or introductions
+    - Use bullet points for multiple insights
+    - Include specific numbers from the data
+    - Focus on actionable recommendations
+    - Keep total response under 200 words
+    - End with 2-3 prioritized actions
+    - Use emojis for visual clarity (🔴 for problems, 💡 for solutions, 📊 for data)
+
+    ANALYSIS PRIORITIES:
+    1. Identify the most critical issue impacting the metric asked about
+    2. Provide 2-3 specific data points supporting your analysis
+    3. Give 2-3 immediate actionable recommendations
+    4. Skip explanatory text and industry context unless directly relevant
+
+    Be direct, data-driven, and actionable. No fluff.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Sorry, I encountered an error analyzing your data: {str(e)}. Please check your API key and model configuration."
+
 # ---------- UI ----------
 st.set_page_config(page_title="KPI Dashboard", layout="wide")
 
@@ -122,6 +404,77 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Funnel & Marketing",
     "🌍 Segmentation"
 ])
+
+# Initialize AI model
+ai_model = configure_ai()
+
+# Add chatbot sidebar
+with st.sidebar:
+    st.header("🤖 AI Business Assistant")
+    
+    if ai_model:
+        # Chat interface
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+        
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+        
+        # Chat input
+        if question := st.chat_input("Ask about your business metrics..."):
+            # Add user message to chat history
+            st.session_state.messages.append({"role": "user", "content": question})
+            
+            # Display user message
+            with st.chat_message("user"):
+                st.write(question)
+            
+            # Get AI response
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing your data..."):
+                    context = get_data_context()
+                    response = query_ai_chatbot(ai_model, question, context)
+                    st.write(response)
+                    
+                    # Add assistant response to chat history
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Clear chat button
+        if st.button("Clear Chat"):
+            st.session_state.messages = []
+            st.rerun()
+            
+        # Example questions
+        st.subheader("💡 Example Questions")
+        example_questions = [
+            "What's our current MRR growth trend?",
+            "How is our customer churn performing?",
+            "What's our LTV/CAC ratio telling us?",
+            "Which months had the best performance?",
+            "How can we improve our retention?",
+            "What's driving our revenue growth?"
+        ]
+        
+        for eq in example_questions:
+            if st.button(eq, key=f"eq_{hash(eq)}"):
+                # Add to chat
+                st.session_state.messages.append({"role": "user", "content": eq})
+                context = get_data_context()
+                response = query_ai_chatbot(ai_model, eq, context)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.rerun()
+    
+    else:
+        st.info("Configure your Gemini API key to enable the AI chatbot")
+        st.markdown("""
+        **Setup Instructions:**
+        1. Get a free API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+        2. Create `.streamlit/secrets.toml` in your project root
+        3. Add: `GEMINI_API_KEY = "your-api-key-here"`
+        """)
+
 
 with tab1:
     st.header("🏦 Revenue & Growth")
@@ -377,21 +730,7 @@ with tab4:
     st.header("📈 Retention & Cohorts")
     st.divider()
 
-    # Revenue retention components -> GRR/NRR
-    mov_ret = (
-        cur_prev.assign(
-            base_mrr=np.where(cur_prev["mrr_prev"] > 0, cur_prev["mrr_prev"], 0.0),
-            churn=np.where((cur_prev["mrr_prev"] > 0) & (cur_prev["mrr"] == 0), cur_prev["mrr_prev"], 0.0),
-            contraction=np.where((cur_prev["mrr_prev"] > cur_prev["mrr"]) & (cur_prev["mrr"] > 0), cur_prev["mrr_prev"] - cur_prev["mrr"], 0.0),
-            expansion=np.where((cur_prev["mrr"] > cur_prev["mrr_prev"]) & (cur_prev["mrr_prev"] > 0), cur_prev["mrr"] - cur_prev["mrr_prev"], 0.0)
-        )
-        .groupby("month", as_index=False)[["base_mrr","churn","contraction","expansion"]]
-        .sum()
-        .sort_values("month")
-    )
-    mov_ret = mov_ret[mov_ret["month"].isin(VALID_MONTHS)].copy()
-    mov_ret["grr"] = np.where(mov_ret["base_mrr"] > 0, (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"]) / mov_ret["base_mrr"] * 100, np.nan)
-    mov_ret["nrr"] = np.where(mov_ret["base_mrr"] > 0, (mov_ret["base_mrr"] - mov_ret["churn"] - mov_ret["contraction"] + mov_ret["expansion"]) / mov_ret["base_mrr"] * 100, np.nan)
+    # Revenue retention already calculated - just create plot version
     mov_plot = mov_ret.copy()
     mov_plot["month_str"] = mov_plot["month"].astype(str)
 
